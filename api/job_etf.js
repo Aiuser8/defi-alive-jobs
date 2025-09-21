@@ -1,4 +1,4 @@
-// api/job-etf.js
+// api/job_etf.js
 const { Client } = require("pg");
 
 const toUnix = (d) => Math.floor(d.getTime() / 1000);
@@ -82,18 +82,6 @@ async function runJobEtf() {
     await client.query(upsert, [gecko_id, dayStr, total_flow_usd]);
     n++;
   }
-
-  // --- Smoke-test row (optional) ---
-  if (process.env.SMOKETEST === "true") {
-    const testGecko = "__smoketest__";
-    const testDay = new Date().toISOString().slice(0,10); // today's UTC
-    const testVal = -1;
-    await client.query(upsert, [testGecko, testDay, testVal]);
-    // console.log is fine; will show in Vercel logs
-    console.log(`⚡ Smoke-test row written for ${testDay} (${testGecko}=${testVal})`);
-    n += 1; // count the smoke row as well
-  }
-
   await client.query("COMMIT");
   await client.end();
 
