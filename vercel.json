@@ -1,10 +1,11 @@
-
 {
   "crons": [
-    { "path": "/api/job_etf",     "schedule": "5 10 * * *" },  
-    { "path": "/api/job_etf",     "schedule": "5 16 * * *" },  
-    { "path": "/api/job_etf",     "schedule": "10 1 * * *" },  
-    { "path": "/api/job_lending", "schedule": "25 1 * * *" }  
+    { "path": "/api/job_etf",                         "schedule": "5 10 * * *"  },
+
+    { "path": "/api/job_lending?offset=0&limit=400",   "schedule": "10 10 * * *" },
+    { "path": "/api/job_lending?offset=400&limit=400", "schedule": "20 10 * * *" },
+    { "path": "/api/job_lending?offset=800&limit=400", "schedule": "30 10 * * *" },
+    { "path": "/api/job_lending?offset=1200&limit=400","schedule": "40 10 * * *" },
+    { "path": "/api/job_lending?offset=1600&limit=400","schedule": "50 10 * * *" }
   ]
 }
-
