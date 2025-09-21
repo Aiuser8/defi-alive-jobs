@@ -3,6 +3,7 @@ const { Client } = require("pg");
 
 const toUnix = (d) => Math.floor(d.getTime() / 1000);
 const isoDay = (d) => d.toISOString().slice(0,10);
+
 function getTargetDay() {
   const override = process.env.TARGET_DAY; // YYYY-MM-DD
   if (override) {
@@ -29,6 +30,7 @@ async function runJobEtf() {
   const t0 = Date.now();
   await client.connect();
 
+  // ensure table & unique constraint
   await client.query(`
     CREATE SCHEMA IF NOT EXISTS update;
     CREATE TABLE IF NOT EXISTS update.raw_etf (
@@ -49,6 +51,7 @@ async function runJobEtf() {
     END$$;
   `);
 
+  // target day window (UTC)
   const target = getTargetDay();
   const start = new Date(target);
   const end   = new Date(target); end.setUTCHours(23,59,59,999);
@@ -56,13 +59,14 @@ async function runJobEtf() {
   const endTs   = toUnix(end);
   const dayStr  = isoDay(target);
 
-  const url = `https://pro-api.llama.fi/${process.env.DEFILLAMA_API_KEY}/etfs/flows?start=${startTs}&end=${endTs}`;
+  // fetch & filter
+  const url = `https://pro-api.llama.fi/${API_KEY}/etfs/flows?start=${startTs}&end=${endTs}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`API HTTP ${res.status} ${res.statusText}`);
   const data = await res.json();
-
   const rows = Array.isArray(data) ? data.filter(r => r?.day && r.day.slice(0,10) === dayStr) : [];
 
+  // upsert
   await client.query("BEGIN");
   const upsert = `
     INSERT INTO update.raw_etf (gecko_id, day, total_flow_usd)
@@ -78,6 +82,18 @@ async function runJobEtf() {
     await client.query(upsert, [gecko_id, dayStr, total_flow_usd]);
     n++;
   }
+
+  // --- Smoke-test row (optional) ---
+  if (process.env.SMOKETEST === "true") {
+    const testGecko = "__smoketest__";
+    const testDay = new Date().toISOString().slice(0,10); // today's UTC
+    const testVal = -1;
+    await client.query(upsert, [testGecko, testDay, testVal]);
+    // console.log is fine; will show in Vercel logs
+    console.log(`⚡ Smoke-test row written for ${testDay} (${testGecko}=${testVal})`);
+    n += 1; // count the smoke row as well
+  }
+
   await client.query("COMMIT");
   await client.end();
 
