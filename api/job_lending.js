@@ -1,40 +1,18 @@
-// alive_job/job_lending.js
-// Pull exactly one full UTC day (yesterday) for all lending pools
-// and upsert into Supabase: update.lending_market_history
-
+// api/job_lending.js
 const fs = require("fs");
+const path = require("path");
 const { Client } = require("pg");
-require("dotenv").config();
 
-const API_KEY = process.env.DEFILLAMA_API_KEY;
-if (!API_KEY) {
-  console.error("Missing DEFILLAMA_API_KEY in .env");
-  process.exit(1);
-}
-
-const client = new Client({
-  host: process.env.PGHOST,
-  port: process.env.PGPORT,
-  database: process.env.PGDATABASE,
-  user: process.env.PGUSER,
-  password: process.env.PGPASSWORD,
-  ssl: process.env.PGSSLMODE ? { rejectUnauthorized: false } : undefined,
-});
-
-// Helpers
-const toUnix = (d) => Math.floor(d.getTime() / 1000);
-const isoDay = (d) => d.toISOString().slice(0, 10);
-
-// Yesterday’s UTC day
+function toUnix(d) { return Math.floor(d.getTime() / 1000); }
+function isoDay(d) { return d.toISOString().slice(0, 10); }
 function getTargetDay() {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 0, 0, 0));
 }
 
-async function ensureTable() {
+async function ensureTable(client) {
   await client.query(`
     CREATE SCHEMA IF NOT EXISTS update;
-
     CREATE TABLE IF NOT EXISTS update.lending_market_history (
       id SERIAL PRIMARY KEY,
       market_id TEXT NOT NULL,
@@ -46,36 +24,38 @@ async function ensureTable() {
       apy_reward_supply NUMERIC,
       apy_base_borrow NUMERIC,
       apy_reward_borrow NUMERIC,
-      created_at TIMESTAMP DEFAULT NOW()
+      created_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE (market_id, ts)
     );
-  `);
-
-  await client.query(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'uniq_market_ts'
-      ) THEN
-        ALTER TABLE update.lending_market_history
-        ADD CONSTRAINT uniq_market_ts UNIQUE (market_id, ts);
-      END IF;
-    END$$;
   `);
 }
 
-async function run() {
-  const t0 = Date.now();
-  await client.connect();
-  await ensureTable();
+module.exports = async (req, res) => {
+  const API_KEY = process.env.DEFILLAMA_API_KEY;
+  if (!API_KEY) return res.status(500).json({ ok:false, error:"Missing DEFILLAMA_API_KEY" });
 
-  // Load poollist.json (list of market_ids you already have in clean)
-  const poollist = JSON.parse(fs.readFileSync("poollist.json", "utf-8"));
-  console.log(`📦 Loaded ${poollist.length} market_ids from poollist.json`);
+  const client = new Client({
+    host: process.env.PGHOST,
+    port: process.env.PGPORT,
+    database: process.env.PGDATABASE,
+    user: process.env.PGUSER,
+    password: process.env.PGPASSWORD,
+    ssl: process.env.PGSSLMODE ? { rejectUnauthorized: false } : undefined,
+  });
+
+  // load poollist.json that you committed with the repo (root of project)
+  const poolPath = path.join(process.cwd(), "poollist.json");
+  let pools;
+  try {
+    pools = JSON.parse(fs.readFileSync(poolPath, "utf8"));
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:`poollist.json not found or invalid: ${e.message}` });
+  }
+  const ids = pools.map(p => p.market_id).filter(Boolean);
 
   const target = getTargetDay();
   const start = new Date(target);
-  const end = new Date(target); end.setUTCHours(23, 59, 59, 999);
-
+  const end = new Date(target); end.setUTCHours(23,59,59,999);
   const startTs = toUnix(start);
   const endTs = toUnix(end);
   const dayStr = isoDay(target);
@@ -96,27 +76,35 @@ async function run() {
       apy_reward_borrow = EXCLUDED.apy_reward_borrow;
   `;
 
+  const t0 = Date.now();
   let inserted = 0;
-  for (let i = 0; i < poollist.length; i++) {
-    const { market_id } = poollist[i];
-    const url = `https://pro-api.llama.fi/${API_KEY}/yields/chartLendBorrow/${market_id}`;
+  let fetched = 0;
 
-    try {
-      const res = await fetch(url);
-      if (!res.ok) {
-        console.warn(`⚠️  ${i + 1}/${poollist.length} ${market_id}: HTTP ${res.status}`);
-        continue;
-      }
-      const data = await res.json();
+  try {
+    await client.connect();
+    await ensureTable(client);
 
-      const rows = Array.isArray(data)
-        ? data.filter(r => {
-            const t = Math.floor(new Date(r.timestamp).getTime() / 1000);
-            return t >= startTs && t <= endTs;
-          })
+    // ⚠️ Serverless functions have time limits. If you have ~1.8k pools,
+    // consider batching. Here we hard-cap per run to first 400 pools to be safe.
+    const MAX_PER_RUN = parseInt(process.env.MAX_POOLS_PER_RUN || "400", 10);
+    const slice = ids.slice(0, MAX_PER_RUN);
+
+    for (const market_id of slice) {
+      const url = `https://pro-api.llama.fi/${API_KEY}/yields/chartLendBorrow/${market_id}`;
+      const resp = await fetch(url);
+      if (!resp.ok) continue;
+      const json = await resp.json();
+
+      const arr = Array.isArray(json) ? json
+        : Array.isArray(json.data) ? json.data
         : [];
 
-      await client.query("BEGIN");
+      const rows = arr.filter(r => {
+        const t = Math.floor(new Date(r.timestamp).getTime() / 1000);
+        return t >= startTs && t <= endTs;
+      });
+
+      fetched += rows.length;
       for (const r of rows) {
         const ts = Math.floor(new Date(r.timestamp).getTime() / 1000);
         await client.query(upsert, [
@@ -132,21 +120,19 @@ async function run() {
         ]);
         inserted++;
       }
-      await client.query("COMMIT");
-      console.log(`✅ ${i + 1}/${poollist.length} ${market_id}: upserted ${rows.length} rows`);
-    } catch (e) {
-      await client.query("ROLLBACK").catch(() => {});
-      console.warn(`⚠️  ${i + 1}/${poollist.length} ${market_id}: ${e.message}`);
     }
+
+    await client.end();
+    return res.status(200).json({
+      ok: true,
+      day: dayStr,
+      pools_considered: slice.length,
+      rows_fetched: fetched,
+      rows_upserted: inserted,
+      ms: Date.now() - t0,
+    });
+  } catch (e) {
+    try { await client.end(); } catch {}
+    return res.status(500).json({ ok:false, error: e.message });
   }
-
-  console.log(`🎯 Done. ${inserted} rows upserted for ${dayStr} in ${Date.now() - t0}ms`);
-  await client.end();
-}
-
-run().catch(async (e) => {
-  console.error("❌ Job failed:", e.message);
-  try { await client.query("ROLLBACK"); } catch {}
-  try { await client.end(); } catch {}
-  process.exit(1);
-});
+};
