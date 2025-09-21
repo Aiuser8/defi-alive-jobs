@@ -1,0 +1,13 @@
+{
+  "name": "alive_job",
+  "version": "1.0.0",
+  "main": "job.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node job.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.2",
+    "pg": "^8.11.5"
+  }
+}
