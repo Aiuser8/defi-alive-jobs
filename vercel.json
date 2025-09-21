@@ -7,3 +7,4 @@
     { "path": "/api/job_lending", "schedule": "25 1 * * *" }  
   ]
 }
+
