@@ -3,9 +3,10 @@ const { Client } = require("pg");
 const fs = require("fs/promises");
 const path = require("path");
 
-const BASE = "https://pro-api.llama.fi/tvl";
+// ===== Config =====
+// Provide your key-included base like: "https://pro-api.llama.fi/<KEY>"
+const PRO_API_BASE = process.env.DEFILLAMA_PRO_BASE; // e.g., "https://pro-api.llama.fi/f162bf7...07ca"
 
-// ----- helpers -----
 function isoDayUTC(d) { return d.toISOString().slice(0, 10); }
 function getYesterdayUTCDateOnly() {
   const now = new Date();
@@ -18,9 +19,7 @@ function wantDayPredicate({ full, since, day }) {
   const target = isoDayUTC(day);
   return (recDay) => recDay === target;
 }
-function buildUrlFromSlug(slug, apiKey) {
-  return `${BASE}/${encodeURIComponent(slug)}/${apiKey}`;
-}
+
 async function ensureTarget(client) {
   await client.query(`
     CREATE SCHEMA IF NOT EXISTS update;
@@ -41,38 +40,7 @@ async function ensureTarget(client) {
       ON update.protocol_chain_tvl_daily (protocol_id, chain, series_type, ts, symbol);
   `);
 }
-function normalizeRecord(r, defaults) {
-  let tsUnix = null;
-  let amount = null;
-  let chain = null;
 
-  if (Array.isArray(r) && r.length >= 2) {
-    tsUnix = r[0];
-    amount = r[1];
-  } else if (r && typeof r === "object") {
-    tsUnix = r.ts ?? r.date ?? r.timestamp ?? r.time ?? null;
-    amount = r.tvl_usd ?? r.tvlUsd ?? r.tvl ?? r.total_liquidity_usd ?? null;
-    chain = r.chain ?? r.chain_name ?? r.network ?? null;
-  } else {
-    return null;
-  }
-
-  if (!chain) return null; // require chain
-
-  if (tsUnix == null || amount == null) return null;
-
-  return {
-    protocol_id: String(defaults.protocol_id),
-    protocol_name: defaults.name ?? null,
-    chain,
-    day: unixToDay(tsUnix),
-    total_liquidity_usd: Number(amount),
-    ingest_time: r?.inserted_at ?? r?.ingest_time ?? null,
-    category: r?.category ?? r?.type ?? null,
-    series_type: "tvl",
-    symbol: "TOTAL",
-  };
-}
 async function loadList(listPathEnv) {
   const listPath = listPathEnv || path.join(process.cwd(), "protocolchaintvllist.json");
   const raw = await fs.readFile(listPath, "utf8");
@@ -81,12 +49,37 @@ async function loadList(listPathEnv) {
   return parsed;
 }
 
-// ----- handler -----
-module.exports = async (req, res) => {
-  const API_KEY = process.env.DEFILLAMA_API_KEY;
-  if (!API_KEY) return res.status(500).json({ ok: false, error: "Missing DEFILLAMA_API_KEY" });
+function buildProtocolUrl(base, slug) {
+  const b = (base || "").replace(/\/$/, ""); // strip trailing slash
+  return `${b}/api/protocol/${encodeURIComponent(slug)}`;
+}
 
-  const LIST_PATH = process.env.TVL_LIST_PATH; // optional override for list file location
+// Normalize a single tvl point from either [ts, val] or {date,totalLiquidityUSD}
+function normalizeTvlPoint(p) {
+  if (Array.isArray(p) && p.length >= 2) {
+    const ts = Number(p[0]);
+    const val = Number(p[1]);
+    if (!Number.isFinite(ts) || !Number.isFinite(val)) return null;
+    return { day: unixToDay(ts), tvl: val };
+  }
+  if (p && typeof p === "object") {
+    const ts = p.date ?? p.ts ?? p.timestamp;
+    const val = p.totalLiquidityUSD ?? p.tvl_usd ?? p.tvlUsd ?? p.tvl;
+    if (ts == null || val == null) return null;
+    const tsNum = Number(ts);
+    const valNum = Number(val);
+    if (!Number.isFinite(tsNum) || !Number.isFinite(valNum)) return null;
+    return { day: unixToDay(tsNum), tvl: valNum };
+  }
+  return null;
+}
+
+module.exports = async (req, res) => {
+  if (!PRO_API_BASE) {
+    return res.status(500).json({ ok: false, error: "Missing DEFILLAMA_PRO_BASE (e.g., https://pro-api.llama.fi/<KEY>)" });
+  }
+
+  const LIST_PATH = process.env.TVL_LIST_PATH; // optional override for list location
 
   // batching params
   const offset = parseInt(req.query.offset || "0", 10);
@@ -115,16 +108,15 @@ module.exports = async (req, res) => {
     const list = await loadList(LIST_PATH);
     overall.protocols_total = list.length;
 
-    // slice by offset/limit if provided
     const slice = (limit > 0) ? list.slice(offset, offset + limit) : list;
     overall.protocols_processed = slice.length;
 
     await client.connect();
     await ensureTarget(client);
 
-    // lock to avoid overlap; add offset in key to allow separate batches to run safely if desired
+    // lock (include offset so separate batches can run safely)
     const lockKey1 = 881234;
-    const lockKey2 = 991340 + (isNaN(offset) ? 0 : offset);
+    const lockKey2 = 991345 + (isNaN(offset) ? 0 : offset);
     const { rows: lockRows } = await client.query(`SELECT pg_try_advisory_lock($1, $2) AS got;`, [lockKey1, lockKey2]);
     if (!lockRows?.[0]?.got) {
       await client.end();
@@ -149,43 +141,50 @@ module.exports = async (req, res) => {
 
     for (const item of slice) {
       const { protocol_id, slug, name } = item;
-      const stats = { slug, protocol_id, name, fetched: 0, considered: 0, inserted: 0, skipped: 0, invalid: 0, error: null };
+      const stats = { slug, protocol_id, name, chains: 0, points: 0, fetched: 0, considered: 0, inserted: 0, skipped: 0, invalid: 0, error: null };
 
       try {
         if (!protocol_id || !slug) throw new Error("Missing protocol_id or slug in list entry");
-        const url = buildUrlFromSlug(slug, API_KEY);
+        const url = buildProtocolUrl(PRO_API_BASE, slug);
 
         const resp = await fetch(url);
         if (!resp.ok) throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
-        let data = await resp.json();
+        const json = await resp.json();
 
-        // Some endpoints return { data: [...] }
-        if (!Array.isArray(data) && Array.isArray(data?.data)) data = data.data;
-        if (!Array.isArray(data)) throw new Error("Expected array or {data: array}");
+        // Expect schema like:
+        // { slug, name, category, tvl: [...], chainTvls: { [chain]: { tvl: [...], ... } } }
+        const chainTvls = json?.chainTvls || json?.chain_tvls || {};
+        const category = json?.category ?? null;
+        const protocol_name = name ?? json?.name ?? null;
 
-        stats.fetched = data.length;
-        overall.fetched += stats.fetched;
+        const chainNames = Object.keys(chainTvls);
+        stats.chains = chainNames.length;
 
-        for (const r of data) {
-          const norm = normalizeRecord(r, { protocol_id, name });
-          if (!norm) { stats.invalid++; overall.invalid++; continue; }
-          if (!keep(norm.day)) { stats.skipped++; overall.skipped++; continue; }
+        for (const chain of chainNames) {
+          const series = chainTvls[chain]?.tvl || [];
+          for (const point of series) {
+            const norm = normalizeTvlPoint(point);
+            if (!norm) { stats.invalid++; overall.invalid++; continue; }
+            stats.points++;
 
-          const params = [
-            norm.protocol_id,
-            norm.chain,
-            norm.series_type,
-            norm.day,
-            norm.total_liquidity_usd,
-            norm.ingest_time,
-            norm.protocol_name,
-            norm.symbol,
-            norm.category
-          ];
+            if (!keep(norm.day)) { stats.skipped++; overall.skipped++; continue; }
 
-          await client.query(upsertSQL, params);
-          stats.considered++; overall.considered++;
-          stats.inserted++; overall.inserted++;
+            const params = [
+              String(protocol_id),
+              chain,
+              "tvl",
+              norm.day,
+              norm.tvl,
+              null,                 // ingest_time → DB defaults to now()
+              protocol_name,
+              "TOTAL",
+              category
+            ];
+
+            await client.query(upsertSQL, params);
+            stats.considered++; overall.considered++;
+            stats.inserted++;  overall.inserted++;
+          }
         }
       } catch (e) {
         stats.error = e.message;
@@ -210,7 +209,7 @@ module.exports = async (req, res) => {
     try { await client.query("ROLLBACK"); } catch {}
     try {
       const lockKey1 = 881234;
-      const lockKey2 = 991340 + (isNaN(offset) ? 0 : offset);
+      const lockKey2 = 991345 + (isNaN(offset) ? 0 : offset);
       await client.query(`SELECT pg_advisory_unlock($1, $2);`, [lockKey1, lockKey2]);
     } catch {}
     try { await client.end(); } catch {}
