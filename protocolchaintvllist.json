@@ -3,7 +3,7 @@
   "functions": {
     "api/job_protocolchaintvl.js": {
       "maxDuration": 60,
-      "includeFiles": "protocolchainlist.json"
+      "includeFiles": "protocolchaintvllist.json"
     }
   }
 },
