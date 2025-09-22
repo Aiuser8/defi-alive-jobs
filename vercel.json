@@ -8,17 +8,7 @@
     { "path": "/api/job_lending?offset=1200&limit=400", "schedule": "40 10 * * *" },
     { "path": "/api/job_lending?offset=1600&limit=400", "schedule": "50 10 * * *" },
 
-    { "path": "/api/job_stablecoins", "schedule": "55 10 * * *" },
+    { "path": "/api/job_stablecoins", "schedule": "55 10 * * *" }
 
-    { "path": "/api/job_protocolchaintvl?offset=0&limit=20",   "schedule": "0 11 * * *" },
-    { "path": "/api/job_protocolchaintvl?offset=20&limit=20",  "schedule": "5 11 * * *" },
-    { "path": "/api/job_protocolchaintvl?offset=40&limit=20",  "schedule": "10 11 * * *" },
-    { "path": "/api/job_protocolchaintvl?offset=60&limit=20",  "schedule": "15 11 * * *" },
-    { "path": "/api/job_protocolchaintvl?offset=80&limit=20",  "schedule": "20 11 * * *" },
-    { "path": "/api/job_protocolchaintvl?offset=100&limit=20", "schedule": "25 11 * * *" },
-    { "path": "/api/job_protocolchaintvl?offset=120&limit=20", "schedule": "30 11 * * *" },
-    { "path": "/api/job_protocolchaintvl?offset=140&limit=20", "schedule": "35 11 * * *" },
-    { "path": "/api/job_protocolchaintvl?offset=160&limit=20", "schedule": "40 11 * * *" },
-    { "path": "/api/job_protocolchaintvl?offset=180&limit=20", "schedule": "45 11 * * *" }
   ]
 }
