@@ -9,12 +9,15 @@ function llamaProtocolUrl(apiKey, slug) {
   return `${base}/${apiKey}/api/protocol/${encodeURIComponent(slug)}`;
 }
 
+// ----- time helpers -----
 function isoDayUTC(d) { return d.toISOString().slice(0, 10); }
 function getYesterdayUTCDateOnly() {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 0, 0, 0));
 }
 function unixToDay(u) { return isoDayUTC(new Date(Number(u) * 1000)); }
+
+// Keep predicate: full / since / yesterday
 function wantDayPredicate({ full, since, day }) {
   if (full) return () => true;
   if (since) return (recDay) => recDay >= since;
@@ -22,6 +25,7 @@ function wantDayPredicate({ full, since, day }) {
   return (recDay) => recDay === target;
 }
 
+// ----- storage helpers -----
 async function ensureTarget(client) {
   await client.query(`
     CREATE SCHEMA IF NOT EXISTS update;
@@ -73,11 +77,9 @@ function normalizeTvlPoint(p) {
 
 module.exports = async (req, res) => {
   const API_KEY = process.env.DEFILLAMA_API_KEY;
-  if (!API_KEY) {
-    return res.status(500).json({ ok: false, error: "Missing DEFILLAMA_API_KEY" });
-  }
+  if (!API_KEY) return res.status(500).json({ ok: false, error: "Missing DEFILLAMA_API_KEY" });
 
-  const LIST_PATH = process.env.TVL_LIST_PATH; // optional override
+  const LIST_PATH = process.env.TVL_LIST_PATH; // optional
 
   // batching + time filters
   const offset = parseInt(req.query.offset || "0", 10);
@@ -86,6 +88,9 @@ module.exports = async (req, res) => {
   const since  = req.query.since; // YYYY-MM-DD
   const day    = getYesterdayUTCDateOnly();
   const keep   = wantDayPredicate({ full, since, day });
+
+  // Optimization knob: how many trailing points per chain to inspect (default 5)
+  const RECENT_POINTS = parseInt(req.query.recent_points || "5", 10);
 
   const client = new Client({
     host: process.env.PGHOST,
@@ -109,9 +114,9 @@ module.exports = async (req, res) => {
     await client.connect();
     await ensureTarget(client);
 
-    // advisory lock (unique per-batch by offset so batches can run in parallel if needed)
+    // advisory lock per-batch (offset) to avoid overlap
     const lockKey1 = 881234;
-    const lockKey2 = 991350 + (isNaN(offset) ? 0 : offset);
+    const lockKey2 = 991360 + (isNaN(offset) ? 0 : offset);
     const { rows: lockRows } = await client.query(`SELECT pg_try_advisory_lock($1, $2) AS got;`, [lockKey1, lockKey2]);
     if (!lockRows?.[0]?.got) {
       await client.end();
@@ -136,7 +141,7 @@ module.exports = async (req, res) => {
 
     for (const item of slice) {
       const { protocol_id, slug, name } = item;
-      const stats = { slug, protocol_id, name, chains: 0, points: 0, considered: 0, inserted: 0, skipped: 0, invalid: 0, error: null };
+      const stats = { slug, protocol_id, name, chains: 0, points_checked: 0, considered: 0, inserted: 0, skipped: 0, invalid: 0, error: null };
 
       try {
         if (!protocol_id || !slug) throw new Error("Missing protocol_id or slug in list entry");
@@ -155,10 +160,17 @@ module.exports = async (req, res) => {
 
         for (const chain of chainNames) {
           const series = chainTvls[chain]?.tvl || [];
-          for (const point of series) {
+          if (series.length === 0) continue;
+
+          // 👇 Only look at the last few points (massive performance win)
+          const tail = series.slice(-Math.max(1, RECENT_POINTS));
+
+          for (const point of tail) {
             const norm = normalizeTvlPoint(point);
             if (!norm) { stats.invalid++; overall.invalid++; continue; }
-            if (!keep(norm.day)) { stats.skipped++; overall.skipped++; continue; }
+            stats.points_checked++;
+
+            if (!keep(norm.day)) { overall.skipped++; stats.skipped++; continue; }
 
             const params = [
               String(protocol_id),
@@ -175,7 +187,6 @@ module.exports = async (req, res) => {
             await client.query(upsertSQL, params);
             stats.considered++; overall.considered++;
             stats.inserted++;  overall.inserted++;
-            stats.points++;
           }
         }
       } catch (e) {
@@ -193,7 +204,7 @@ module.exports = async (req, res) => {
     return res.status(200).json({
       ok: true,
       mode: full ? "full" : (since ? `since:${since}` : `yesterday:${isoDayUTC(day)}`),
-      batch: { offset, limit },
+      batch: { offset, limit, recent_points: RECENT_POINTS },
       overall,
       perProtocol
     });
@@ -201,7 +212,7 @@ module.exports = async (req, res) => {
     try { await client.query("ROLLBACK"); } catch {}
     try {
       const lockKey1 = 881234;
-      const lockKey2 = 991350 + (isNaN(offset) ? 0 : offset);
+      const lockKey2 = 991360 + (isNaN(offset) ? 0 : offset);
       await client.query(`SELECT pg_advisory_unlock($1, $2);`, [lockKey1, lockKey2]);
     } catch {}
     try { await client.end(); } catch {}
