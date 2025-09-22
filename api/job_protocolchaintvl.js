@@ -1,24 +1,26 @@
-// api/job_protocolchaintvllist.js (you can name it job_protocolchaintvl.js)
+// api/job_protocolchaintvl.js
 const { Client } = require("pg");
 const fs = require("fs/promises");
 const path = require("path");
 
 const BASE = "https://pro-api.llama.fi/tvl";
 
+// ----- helpers -----
 function isoDayUTC(d) { return d.toISOString().slice(0, 10); }
 function getYesterdayUTCDateOnly() {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 0, 0, 0));
 }
 function unixToDay(u) { return isoDayUTC(new Date(Number(u) * 1000)); }
-
 function wantDayPredicate({ full, since, day }) {
   if (full) return () => true;
   if (since) return (recDay) => recDay >= since;
   const target = isoDayUTC(day);
   return (recDay) => recDay === target;
 }
-
+function buildUrlFromSlug(slug, apiKey) {
+  return `${BASE}/${encodeURIComponent(slug)}/${apiKey}`;
+}
 async function ensureTarget(client) {
   await client.query(`
     CREATE SCHEMA IF NOT EXISTS update;
@@ -39,15 +41,6 @@ async function ensureTarget(client) {
       ON update.protocol_chain_tvl_daily (protocol_id, chain, series_type, ts, symbol);
   `);
 }
-
-function buildUrlFromSlug(slug, apiKey) {
-  return `${BASE}/${encodeURIComponent(slug)}/${apiKey}`;
-}
-
-/**
- * Try to normalize a single record from DeFiLlama-like payloads.
- * Requires: ts/date (unix seconds), value (tvl_usd/tvlUsd/tvl/total_liquidity_usd), chain.
- */
 function normalizeRecord(r, defaults) {
   let tsUnix = null;
   let amount = null;
@@ -64,9 +57,9 @@ function normalizeRecord(r, defaults) {
     return null;
   }
 
-  if (!chain) chain = defaults.chain ?? null; // only use if you add a chain to defaults later
+  if (!chain) return null; // require chain
 
-  if (tsUnix == null || amount == null || !chain) return null;
+  if (tsUnix == null || amount == null) return null;
 
   return {
     protocol_id: String(defaults.protocol_id),
@@ -80,7 +73,6 @@ function normalizeRecord(r, defaults) {
     symbol: "TOTAL",
   };
 }
-
 async function loadList(listPathEnv) {
   const listPath = listPathEnv || path.join(process.cwd(), "protocolchaintvllist.json");
   const raw = await fs.readFile(listPath, "utf8");
@@ -89,11 +81,22 @@ async function loadList(listPathEnv) {
   return parsed;
 }
 
+// ----- handler -----
 module.exports = async (req, res) => {
   const API_KEY = process.env.DEFILLAMA_API_KEY;
   if (!API_KEY) return res.status(500).json({ ok: false, error: "Missing DEFILLAMA_API_KEY" });
 
-  const LIST_PATH = process.env.TVL_LIST_PATH; // optional override
+  const LIST_PATH = process.env.TVL_LIST_PATH; // optional override for list file location
+
+  // batching params
+  const offset = parseInt(req.query.offset || "0", 10);
+  const limit  = parseInt(req.query.limit  || "0", 10);
+
+  // temporal params
+  const full  = req.query.full === "1";
+  const since = req.query.since; // YYYY-MM-DD
+  const day   = getYesterdayUTCDateOnly();
+  const keep  = wantDayPredicate({ full, since, day });
 
   const client = new Client({
     host: process.env.PGHOST,
@@ -105,23 +108,23 @@ module.exports = async (req, res) => {
   });
 
   const t0 = Date.now();
-  const full = req.query.full === "1";
-  const since = req.query.since; // YYYY-MM-DD
-  const day = getYesterdayUTCDateOnly();
-  const keep = wantDayPredicate({ full, since, day });
-
-  const overall = { protocols: 0, fetched: 0, considered: 0, inserted: 0, skipped: 0, invalid: 0, ms: 0 };
+  const overall = { protocols_total: 0, protocols_processed: 0, fetched: 0, considered: 0, inserted: 0, skipped: 0, invalid: 0, ms: 0 };
   const perProtocol = [];
 
   try {
     const list = await loadList(LIST_PATH);
-    overall.protocols = list.length;
+    overall.protocols_total = list.length;
+
+    // slice by offset/limit if provided
+    const slice = (limit > 0) ? list.slice(offset, offset + limit) : list;
+    overall.protocols_processed = slice.length;
 
     await client.connect();
     await ensureTarget(client);
 
-    // prevent overlap
-    const lockKey1 = 881234, lockKey2 = 991340;
+    // lock to avoid overlap; add offset in key to allow separate batches to run safely if desired
+    const lockKey1 = 881234;
+    const lockKey2 = 991340 + (isNaN(offset) ? 0 : offset);
     const { rows: lockRows } = await client.query(`SELECT pg_try_advisory_lock($1, $2) AS got;`, [lockKey1, lockKey2]);
     if (!lockRows?.[0]?.got) {
       await client.end();
@@ -144,7 +147,7 @@ module.exports = async (req, res) => {
 
     await client.query("BEGIN");
 
-    for (const item of list) {
+    for (const item of slice) {
       const { protocol_id, slug, name } = item;
       const stats = { slug, protocol_id, name, fetched: 0, considered: 0, inserted: 0, skipped: 0, invalid: 0, error: null };
 
@@ -199,14 +202,18 @@ module.exports = async (req, res) => {
     return res.status(200).json({
       ok: true,
       mode: full ? "full" : (since ? `since:${since}` : `yesterday:${isoDayUTC(day)}`),
+      batch: { offset, limit },
       overall,
       perProtocol
     });
   } catch (e) {
     try { await client.query("ROLLBACK"); } catch {}
-    try { await client.query(`SELECT pg_advisory_unlock(881234, 991340);`); } catch {}
+    try {
+      const lockKey1 = 881234;
+      const lockKey2 = 991340 + (isNaN(offset) ? 0 : offset);
+      await client.query(`SELECT pg_advisory_unlock($1, $2);`, [lockKey1, lockKey2]);
+    } catch {}
     try { await client.end(); } catch {}
     return res.status(500).json({ ok: false, error: e.message });
   }
 };
-
