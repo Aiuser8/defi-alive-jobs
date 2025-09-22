@@ -78,7 +78,7 @@ module.exports = async (req, res) => {
   const day    = getYesterdayUTCDateOnly();
   const keep   = wantDayPredicate({ full, since, day });
 
-  const RECENT_POINTS = parseInt(req.query.recent_points || "2", 10);
+  const RECENT_POINTS = parseInt(req.query.recent_points || "1", 10);
 
   const client = new Client({
     host: process.env.PGHOST,
