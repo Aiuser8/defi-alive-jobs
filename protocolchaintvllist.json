@@ -1,4 +1,11 @@
 [
+    {
+  "functions": {
+    "api/job_protocolchaintvl.js": {
+      "includeFiles": "protocolchaintvllist.json"
+    }
+  }
+},
   {
     "protocol_id": "2269",
     "slug": "binance-cex",
