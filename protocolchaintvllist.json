@@ -1,4 +1,12 @@
 [
+    {
+  "functions": {
+    "api/job_protocolchaintvl.js": {
+      "maxDuration": 60,
+      "includeFiles": "protocolchainlist.json"
+    }
+  }
+},
   {
     "protocol_id": "2929",
     "protocol_name": "SparkLend",
