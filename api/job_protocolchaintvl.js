@@ -3,21 +3,16 @@ const { Client } = require("pg");
 const fs = require("fs/promises");
 const path = require("path");
 
-// Build https://pro-api.llama.fi/<KEY>/api/protocol/{slug}
-function llamaProtocolUrl(apiKey, slug) {
-  const base = "https://pro-api.llama.fi";
-  return `${base}/${apiKey}/api/protocol/${encodeURIComponent(slug)}`;
+function llamaProtocolUrl(apiKey, id) {
+  return `https://pro-api.llama.fi/${apiKey}/api/protocol/${id}`;
 }
 
-// ----- time helpers -----
 function isoDayUTC(d) { return d.toISOString().slice(0, 10); }
 function getYesterdayUTCDateOnly() {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 0, 0, 0));
 }
 function unixToDay(u) { return isoDayUTC(new Date(Number(u) * 1000)); }
-
-// Keep predicate: full / since / yesterday
 function wantDayPredicate({ full, since, day }) {
   if (full) return () => true;
   if (since) return (recDay) => recDay >= since;
@@ -25,7 +20,6 @@ function wantDayPredicate({ full, since, day }) {
   return (recDay) => recDay === target;
 }
 
-// ----- storage helpers -----
 async function ensureTarget(client) {
   await client.query(`
     CREATE SCHEMA IF NOT EXISTS update;
@@ -48,14 +42,13 @@ async function ensureTarget(client) {
 }
 
 async function loadList(listPathEnv) {
-  const listPath = listPathEnv || path.join(process.cwd(), "protocolchaintvllist.json");
+  const listPath = listPathEnv || path.join(process.cwd(), "protocolchainlist.json");
   const raw = await fs.readFile(listPath, "utf8");
   const parsed = JSON.parse(raw);
-  if (!Array.isArray(parsed)) throw new Error("protocolchaintvllist.json must be an array of { protocol_id, slug, name }");
+  if (!Array.isArray(parsed)) throw new Error("protocolchainlist.json must be an array");
   return parsed;
 }
 
-// Normalize TVL points from [ts, val] or {date,totalLiquidityUSD}
 function normalizeTvlPoint(p) {
   if (Array.isArray(p) && p.length >= 2) {
     const ts = Number(p[0]);
@@ -67,10 +60,7 @@ function normalizeTvlPoint(p) {
     const ts = p.date ?? p.ts ?? p.timestamp;
     const val = p.totalLiquidityUSD ?? p.tvl_usd ?? p.tvlUsd ?? p.tvl;
     if (ts == null || val == null) return null;
-    const tsNum = Number(ts);
-    const valNum = Number(val);
-    if (!Number.isFinite(tsNum) || !Number.isFinite(valNum)) return null;
-    return { day: unixToDay(tsNum), tvl: valNum };
+    return { day: unixToDay(Number(ts)), tvl: Number(val) };
   }
   return null;
 }
@@ -79,18 +69,16 @@ module.exports = async (req, res) => {
   const API_KEY = process.env.DEFILLAMA_API_KEY;
   if (!API_KEY) return res.status(500).json({ ok: false, error: "Missing DEFILLAMA_API_KEY" });
 
-  const LIST_PATH = process.env.TVL_LIST_PATH; // optional
+  const LIST_PATH = process.env.TVL_LIST_PATH;
 
-  // batching + time filters
   const offset = parseInt(req.query.offset || "0", 10);
-  const limit  = parseInt(req.query.limit  || "0", 10);
+  const limit  = parseInt(req.query.limit  || "20", 10); // default batch size = 20
   const full   = req.query.full === "1";
-  const since  = req.query.since; // YYYY-MM-DD
+  const since  = req.query.since;
   const day    = getYesterdayUTCDateOnly();
   const keep   = wantDayPredicate({ full, since, day });
 
-  // Optimization knob: how many trailing points per chain to inspect (default 5)
-  const RECENT_POINTS = parseInt(req.query.recent_points || "5", 10);
+  const RECENT_POINTS = parseInt(req.query.recent_points || "2", 10);
 
   const client = new Client({
     host: process.env.PGHOST,
@@ -102,26 +90,19 @@ module.exports = async (req, res) => {
   });
 
   const t0 = Date.now();
-  const overall = { protocols_total: 0, protocols_processed: 0, fetched: 0, considered: 0, inserted: 0, skipped: 0, invalid: 0, ms: 0 };
+  const overall = { protocols_total: 0, protocols_processed: 0, considered: 0, inserted: 0, skipped: 0, invalid: 0, ms: 0 };
   const perProtocol = [];
 
   try {
     const list = await loadList(LIST_PATH);
     overall.protocols_total = list.length;
-    const slice = (limit > 0) ? list.slice(offset, offset + limit) : list;
+    const slice = list.slice(offset, offset + limit);
     overall.protocols_processed = slice.length;
 
     await client.connect();
     await ensureTarget(client);
 
-    // advisory lock per-batch (offset) to avoid overlap
-    const lockKey1 = 881234;
-    const lockKey2 = 991360 + (isNaN(offset) ? 0 : offset);
-    const { rows: lockRows } = await client.query(`SELECT pg_try_advisory_lock($1, $2) AS got;`, [lockKey1, lockKey2]);
-    if (!lockRows?.[0]?.got) {
-      await client.end();
-      return res.status(423).json({ ok: false, error: "Another job is running (advisory lock held)" });
-    }
+    await client.query("BEGIN");
 
     const upsertSQL = `
       INSERT INTO update.protocol_chain_tvl_daily (
@@ -137,24 +118,17 @@ module.exports = async (req, res) => {
         category            = COALESCE(EXCLUDED.category,      update.protocol_chain_tvl_daily.category)
     `;
 
-    await client.query("BEGIN");
-
     for (const item of slice) {
-      const { protocol_id, slug, name } = item;
-      const stats = { slug, protocol_id, name, chains: 0, points_checked: 0, considered: 0, inserted: 0, skipped: 0, invalid: 0, error: null };
+      const { protocol_id, protocol_name, category } = item;
+      const stats = { protocol_id, protocol_name, chains: 0, considered: 0, inserted: 0, skipped: 0, invalid: 0, error: null };
 
       try {
-        if (!protocol_id || !slug) throw new Error("Missing protocol_id or slug in list entry");
-        const url = llamaProtocolUrl(API_KEY, slug);
-
+        const url = llamaProtocolUrl(API_KEY, protocol_id);
         const resp = await fetch(url);
         if (!resp.ok) throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
         const json = await resp.json();
 
-        const chainTvls = json?.chainTvls || json?.chain_tvls || {};
-        const category = json?.category ?? null;
-        const protocol_name = name ?? json?.name ?? null;
-
+        const chainTvls = json?.chainTvls || {};
         const chainNames = Object.keys(chainTvls);
         stats.chains = chainNames.length;
 
@@ -162,15 +136,11 @@ module.exports = async (req, res) => {
           const series = chainTvls[chain]?.tvl || [];
           if (series.length === 0) continue;
 
-          // 👇 Only look at the last few points (massive performance win)
-          const tail = series.slice(-Math.max(1, RECENT_POINTS));
-
+          const tail = series.slice(-RECENT_POINTS);
           for (const point of tail) {
             const norm = normalizeTvlPoint(point);
             if (!norm) { stats.invalid++; overall.invalid++; continue; }
-            stats.points_checked++;
-
-            if (!keep(norm.day)) { overall.skipped++; stats.skipped++; continue; }
+            if (!keep(norm.day)) { stats.skipped++; overall.skipped++; continue; }
 
             const params = [
               String(protocol_id),
@@ -178,7 +148,7 @@ module.exports = async (req, res) => {
               "tvl",
               norm.day,
               norm.tvl,
-              null,            // ingest_time → defaults to now()
+              null,
               protocol_name,
               "TOTAL",
               category
@@ -192,29 +162,22 @@ module.exports = async (req, res) => {
       } catch (e) {
         stats.error = e.message;
       }
-
       perProtocol.push(stats);
     }
 
     await client.query("COMMIT");
-    await client.query(`SELECT pg_advisory_unlock($1, $2);`, [lockKey1, lockKey2]);
     await client.end();
 
     overall.ms = Date.now() - t0;
     return res.status(200).json({
       ok: true,
       mode: full ? "full" : (since ? `since:${since}` : `yesterday:${isoDayUTC(day)}`),
-      batch: { offset, limit, recent_points: RECENT_POINTS },
+      batch: { offset, limit },
       overall,
       perProtocol
     });
   } catch (e) {
     try { await client.query("ROLLBACK"); } catch {}
-    try {
-      const lockKey1 = 881234;
-      const lockKey2 = 991360 + (isNaN(offset) ? 0 : offset);
-      await client.query(`SELECT pg_advisory_unlock($1, $2);`, [lockKey1, lockKey2]);
-    } catch {}
     try { await client.end(); } catch {}
     return res.status(500).json({ ok: false, error: e.message });
   }
