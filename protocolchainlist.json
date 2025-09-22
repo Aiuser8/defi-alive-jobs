@@ -19,7 +19,7 @@
     "category": "Canonical Bridge",
     "tvl_usd": "5970260649.00"
   },
-  {
+  { 
     "protocol_id": "2293",
     "protocol_name": "Bitmex",
     "category": "CEX",
