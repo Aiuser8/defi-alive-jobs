@@ -8,7 +8,12 @@
     { "path": "/api/job_lending?offset=1200&limit=400", "schedule": "40 10 * * *" },
     { "path": "/api/job_lending?offset=1600&limit=400", "schedule": "50 10 * * *" },
 
-    { "path": "/api/job_stablecoins", "schedule": "55 10 * * *" }
+    { "path": "/api/job_stablecoins", "schedule": "55 10 * * *" },
 
+    { "path": "/api/backfill_token_prices?offset=0&limit=500",    "schedule": "0 11 * * *" },
+    { "path": "/api/backfill_token_prices?offset=500&limit=500",  "schedule": "2 11 * * *" },
+    { "path": "/api/backfill_token_prices?offset=1000&limit=500", "schedule": "4 11 * * *" },
+    { "path": "/api/backfill_token_prices?offset=1500&limit=500", "schedule": "6 11 * * *" },
+    { "path": "/api/backfill_token_prices?offset=2000&limit=500", "schedule": "8 11 * * *" }
   ]
 }
