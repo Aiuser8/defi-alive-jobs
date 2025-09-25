@@ -1,5 +1,5 @@
 // api/backfill_token_prices_with_quality.js (CommonJS)
-// Enhanced version with data quality gates and scrub table routing
+// Live token price collection with data quality gates and scrub table routing
 // Force Node runtime (pg not supported on Edge)
 module.exports.config = { runtime: 'nodejs18.x' };
 
@@ -37,6 +37,10 @@ function yesterdayMidnightUtcUnix() {
   const now = new Date();
   const todayMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   return Math.floor((todayMidnight - 24*60*60*1000) / 1000);
+}
+
+function currentTimestampUnix() {
+  return Math.floor(Date.now() / 1000);
 }
 
 async function fetchHistoricalForBatch(ts, coinIds, apiKey) {
@@ -146,7 +150,7 @@ module.exports = async (req, res) => {
       return res.status(200).json({ message: 'All tokens in slice invalid.', offset, limit, skipped });
     }
 
-    const ts = yesterdayMidnightUtcUnix();
+    const ts = currentTimestampUnix();
     const BATCH_SIZE = 25;
     const SLEEP_MS = 120;
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));

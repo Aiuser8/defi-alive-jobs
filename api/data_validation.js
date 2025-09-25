@@ -52,15 +52,18 @@ function validateTokenPrice(priceData, previousPrice = null) {
     }
   }
 
-  // Timestamp validation
+  // Timestamp validation - more lenient for API data
   if (!priceData.timestamp || !Number.isFinite(priceData.timestamp)) {
     errors.push('invalid_timestamp');
     qualityScore -= 25;
   } else {
     const ageMinutes = (Date.now() - priceData.timestamp * 1000) / (1000 * 60);
-    if (ageMinutes > 60) {
+    if (ageMinutes > 180) { // Increased from 60 to 180 minutes (3 hours)
       errors.push('stale_data');
-      qualityScore -= Math.min(30, ageMinutes / 2);
+      qualityScore -= Math.min(20, ageMinutes / 10); // Reduced penalty
+    } else if (ageMinutes > 60) {
+      // Data is somewhat stale but not critically so
+      qualityScore -= Math.min(10, ageMinutes / 20); // Light penalty
     }
   }
 
