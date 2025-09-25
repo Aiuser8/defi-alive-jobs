@@ -252,59 +252,69 @@ async function getPreviousPrice(client, coinId, currentTimestamp) {
  * Insert data into scrub table
  */
 async function insertIntoScrubTable(client, tableName, data, validation, jobRunId, originalData) {
-  const scrubData = {
-    ...data,
-    validation_errors: validation.errors,
-    quality_score: validation.qualityScore,
-    is_outlier: validation.isOutlier,
-    outlier_reason: validation.outlierReason,
-    original_data: originalData,
-    job_run_id: jobRunId
-  };
-  
-  // Fix column name mapping for different tables
-  if (tableName === 'token_price_scrub') {
-    if (data.coinId) {
-      scrubData.coin_id = data.coinId;
-      delete scrubData.coinId;
+  try {
+    const scrubData = {
+      validation_errors: validation.errors,
+      quality_score: Math.round(validation.qualityScore), // Ensure integer
+      is_outlier: validation.isOutlier,
+      outlier_reason: validation.outlierReason,
+      original_data: originalData,
+      job_run_id: jobRunId
+    };
+
+    // Fix column name mapping for different tables
+    if (tableName === 'token_price_scrub') {
+      if (data.coinId) {
+        scrubData.coin_id = data.coinId;
+      }
+      if (data.tsSec) {
+        scrubData.price_timestamp = new Date(data.tsSec * 1000).toISOString();
+      }
+      if (data.price !== undefined) {
+        scrubData.price_usd = data.price;
+      }
+      if (data.symbol) {
+        scrubData.symbol = data.symbol;
+      }
+      if (data.confidence !== undefined) {
+        scrubData.confidence = data.confidence;
+      }
+      if (data.decimals !== undefined) {
+        scrubData.decimals = Math.round(data.decimals); // Ensure integer
+      }
     }
-    if (data.tsSec) {
-      scrubData.price_timestamp = new Date(data.tsSec * 1000).toISOString();
-      delete scrubData.tsSec;
+    if (tableName === 'lending_market_scrub' && data.market_id) {
+      scrubData.market_id = data.market_id;
     }
-    if (data.price) {
-      scrubData.price_usd = data.price;
-      delete scrubData.price;
+
+    // Remove undefined values
+    const cleanData = Object.fromEntries(
+      Object.entries(scrubData).filter(([_, v]) => v !== undefined && v !== null)
+    );
+
+    // Validate we have the required columns
+    if (Object.keys(cleanData).length === 0) {
+      console.error('No valid data to insert into scrub table:', { tableName, data, validation });
+      return;
     }
-    if (data.symbol) {
-      scrubData.symbol = data.symbol;
-    }
-    if (data.confidence) {
-      scrubData.confidence = data.confidence;
-    }
-    if (data.decimals) {
-      scrubData.decimals = data.decimals;
-    }
-    // Remove timestamp field that doesn't exist in the table
-    delete scrubData.timestamp;
+
+    const columns = Object.keys(cleanData);
+    const values = Object.values(cleanData);
+    const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
+
+    await client.query(`
+      INSERT INTO scrub.${tableName} (${columns.join(', ')})
+      VALUES (${placeholders})
+    `, values);
+    
+  } catch (error) {
+    console.error(`Failed to insert into ${tableName}:`, {
+      error: error.message,
+      data: data,
+      validation: validation
+    });
+    // Don't throw - allow the job to continue with other records
   }
-  if (tableName === 'lending_market_scrub' && data.market_id) {
-    scrubData.market_id = data.market_id;
-  }
-
-  // Remove undefined values and convert to proper format
-  const cleanData = Object.fromEntries(
-    Object.entries(scrubData).filter(([_, v]) => v !== undefined)
-  );
-
-  const columns = Object.keys(cleanData);
-  const values = Object.values(cleanData);
-  const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
-
-  await client.query(`
-    INSERT INTO scrub.${tableName} (${columns.join(', ')})
-    VALUES (${placeholders})
-  `, values);
 }
 
 /**
