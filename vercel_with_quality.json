@@ -1,0 +1,33 @@
+{
+  "crons": [
+    // Original jobs (can be gradually replaced)
+    { "path": "/api/job_etf", "schedule": "5 10 * * *" },
+    { "path": "/api/job_lending?offset=0&limit=400",    "schedule": "10 10 * * *" },
+    { "path": "/api/job_lending?offset=400&limit=400",  "schedule": "20 10 * * *" },
+    { "path": "/api/job_lending?offset=800&limit=400",  "schedule": "30 10 * * *" },
+    { "path": "/api/job_lending?offset=1200&limit=400", "schedule": "40 10 * * *" },
+    { "path": "/api/job_lending?offset=1600&limit=400", "schedule": "50 10 * * *" },
+    { "path": "/api/job_stablecoins", "schedule": "55 10 * * *" },
+    { "path": "/api/backfill_token_prices?offset=0&limit=500",    "schedule": "0 11 * * *" },
+    { "path": "/api/backfill_token_prices?offset=500&limit=500",  "schedule": "2 11 * * *" },
+    { "path": "/api/backfill_token_prices?offset=1000&limit=500", "schedule": "4 11 * * *" },
+    { "path": "/api/backfill_token_prices?offset=1500&limit=500", "schedule": "6 11 * * *" },
+    { "path": "/api/backfill_token_prices?offset=2000&limit=500", "schedule": "8 11 * * *" },
+
+    // Quality-enabled jobs (gradual rollout)
+    { "path": "/api/job_lending_with_quality?offset=0&limit=400",    "schedule": "15 10 * * *" },
+    { "path": "/api/job_lending_with_quality?offset=400&limit=400",  "schedule": "25 10 * * *" },
+    { "path": "/api/job_lending_with_quality?offset=800&limit=400",  "schedule": "35 10 * * *" },
+    { "path": "/api/job_lending_with_quality?offset=1200&limit=400", "schedule": "45 10 * * *" },
+    { "path": "/api/job_lending_with_quality?offset=1600&limit=400", "schedule": "0 11 * * *" },
+    
+    { "path": "/api/backfill_token_prices_with_quality?offset=0&limit=500",    "schedule": "5 11 * * *" },
+    { "path": "/api/backfill_token_prices_with_quality?offset=500&limit=500",  "schedule": "7 11 * * *" },
+    { "path": "/api/backfill_token_prices_with_quality?offset=1000&limit=500", "schedule": "9 11 * * *" },
+    { "path": "/api/backfill_token_prices_with_quality?offset=1500&limit=500", "schedule": "11 11 * * *" },
+    { "path": "/api/backfill_token_prices_with_quality?offset=2000&limit=500", "schedule": "13 11 * * *" },
+
+    // Quality monitoring (runs every 6 hours)
+    { "path": "/api/quality_monitor?type=health", "schedule": "0 */6 * * *" }
+  ]
+}

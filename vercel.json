@@ -1,19 +1,21 @@
 {
   "crons": [
     { "path": "/api/job_etf", "schedule": "5 10 * * *" },
-
-    { "path": "/api/job_lending?offset=0&limit=400",    "schedule": "10 10 * * *" },
-    { "path": "/api/job_lending?offset=400&limit=400",  "schedule": "20 10 * * *" },
-    { "path": "/api/job_lending?offset=800&limit=400",  "schedule": "30 10 * * *" },
-    { "path": "/api/job_lending?offset=1200&limit=400", "schedule": "40 10 * * *" },
-    { "path": "/api/job_lending?offset=1600&limit=400", "schedule": "50 10 * * *" },
-
+    
+    { "path": "/api/job_lending_with_quality?offset=0&limit=400", "schedule": "0 */6 * * *" },
+    { "path": "/api/job_lending_with_quality?offset=400&limit=400", "schedule": "10 */6 * * *" },
+    { "path": "/api/job_lending_with_quality?offset=800&limit=400", "schedule": "20 */6 * * *" },
+    { "path": "/api/job_lending_with_quality?offset=1200&limit=400", "schedule": "30 */6 * * *" },
+    { "path": "/api/job_lending_with_quality?offset=1600&limit=400", "schedule": "40 */6 * * *" },
+    
     { "path": "/api/job_stablecoins", "schedule": "55 10 * * *" },
-
-    { "path": "/api/backfill_token_prices?offset=0&limit=500",    "schedule": "0 11 * * *" },
-    { "path": "/api/backfill_token_prices?offset=500&limit=500",  "schedule": "2 11 * * *" },
-    { "path": "/api/backfill_token_prices?offset=1000&limit=500", "schedule": "4 11 * * *" },
-    { "path": "/api/backfill_token_prices?offset=1500&limit=500", "schedule": "6 11 * * *" },
-    { "path": "/api/backfill_token_prices?offset=2000&limit=500", "schedule": "8 11 * * *" }
+    
+    { "path": "/api/backfill_token_prices_with_quality?offset=0&limit=500", "schedule": "*/5 * * * *" },
+    { "path": "/api/backfill_token_prices_with_quality?offset=500&limit=500", "schedule": "1,6,11,16,21,26,31,36,41,46,51,56 * * * *" },
+    { "path": "/api/backfill_token_prices_with_quality?offset=1000&limit=500", "schedule": "2,7,12,17,22,27,32,37,42,47,52,57 * * * *" },
+    { "path": "/api/backfill_token_prices_with_quality?offset=1500&limit=500", "schedule": "3,8,13,18,23,28,33,38,43,48,53,58 * * * *" },
+    { "path": "/api/backfill_token_prices_with_quality?offset=2000&limit=500", "schedule": "4,9,14,19,24,29,34,39,44,49,54,59 * * * *" },
+    
+    { "path": "/api/quality_monitor?type=health", "schedule": "0 */6 * * *" }
   ]
 }
