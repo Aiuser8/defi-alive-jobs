@@ -283,8 +283,25 @@ async function insertIntoScrubTable(client, tableName, data, validation, jobRunI
         scrubData.decimals = Math.round(data.decimals); // Ensure integer
       }
     }
-    if (tableName === 'lending_market_scrub' && data.market_id) {
-      scrubData.market_id = data.market_id;
+    if (tableName === 'lending_market_scrub') {
+      if (data.market_id) {
+        scrubData.market_id = data.market_id;
+      }
+      if (data.ts !== undefined) {
+        scrubData.ts = data.ts;
+      }
+      if (data.timestamp !== undefined) {
+        scrubData.ts = data.timestamp; // Use timestamp as ts if ts not available
+      }
+      if (data.project) {
+        scrubData.project = data.project;
+      }
+      if (data.chain) {
+        scrubData.chain = data.chain;
+      }
+      if (data.symbol) {
+        scrubData.symbol = data.symbol;
+      }
     }
     if (tableName === 'cl_pool_hist_scrub') {
       if (data.pool_id) {
