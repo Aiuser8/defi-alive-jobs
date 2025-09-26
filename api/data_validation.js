@@ -303,6 +303,35 @@ async function insertIntoScrubTable(client, tableName, data, validation, jobRunI
         scrubData.symbol = data.symbol;
       }
     }
+    if (tableName === 'protocol_tvl_scrub') {
+      if (data.protocol_id) {
+        scrubData.protocol_id = data.protocol_id;
+      }
+      if (data.protocol_name) {
+        scrubData.protocol_name = data.protocol_name;
+      }
+      if (data.chain) {
+        scrubData.chain = data.chain;
+      }
+      if (data.series_type) {
+        scrubData.series_type = data.series_type;
+      }
+      if (data.ts) {
+        scrubData.ts = data.ts;
+      }
+      if (data.total_liquidity_usd !== undefined) {
+        scrubData.total_liquidity_usd = data.total_liquidity_usd;
+      }
+      if (data.category) {
+        scrubData.category = data.category;
+      }
+      if (data.symbol) {
+        scrubData.symbol = data.symbol;
+      }
+      if (data.url) {
+        scrubData.url = data.url;
+      }
+    }
     if (tableName === 'cl_pool_hist_scrub') {
       if (data.pool_id) {
         scrubData.pool_id = data.pool_id;
@@ -402,12 +431,81 @@ async function updateQualitySummary(client, jobName, jobRunId, metrics) {
   ]);
 }
 
+/**
+ * Validate protocol TVL data
+ */
+function validateProtocolTvlData(protocolData) {
+  const errors = [];
+  let qualityScore = 100;
+  let isOutlier = false;
+  let outlierReason = null;
+
+  // Basic validation
+  if (!protocolData.protocol_id || typeof protocolData.protocol_id !== 'string') {
+    errors.push('invalid_protocol_id');
+    qualityScore -= 30;
+  }
+
+  if (!protocolData.chain || typeof protocolData.chain !== 'string') {
+    errors.push('invalid_chain');
+    qualityScore -= 25;
+  }
+
+  if (!protocolData.total_liquidity_usd || typeof protocolData.total_liquidity_usd !== 'number') {
+    errors.push('invalid_tvl_amount');
+    qualityScore -= 40;
+  } else {
+    const tvl = protocolData.total_liquidity_usd;
+    
+    // TVL range validation
+    if (tvl <= 0) {
+      errors.push('negative_tvl');
+      qualityScore -= 50;
+    } else if (tvl < 1000) {
+      // Very small TVL might be noise
+      isOutlier = true;
+      outlierReason = `very_small_tvl_${tvl.toFixed(2)}`;
+      qualityScore -= 10;
+    } else if (tvl > 500e9) {
+      // TVL > $500B is unrealistic for single protocol/chain
+      errors.push('unrealistic_tvl_high');
+      qualityScore -= 30;
+      isOutlier = true;
+      outlierReason = `extremely_high_tvl_${(tvl / 1e9).toFixed(1)}B`;
+    }
+  }
+
+  // Date validation
+  if (!protocolData.ts) {
+    errors.push('missing_timestamp');
+    qualityScore -= 20;
+  }
+
+  // Protocol name validation
+  if (!protocolData.protocol_name || protocolData.protocol_name.trim().length === 0) {
+    errors.push('missing_protocol_name');
+    qualityScore -= 15;
+  }
+
+  // Ensure quality score doesn't go below 0
+  qualityScore = Math.max(0, qualityScore);
+
+  return {
+    isValid: errors.length === 0 && qualityScore >= 60,
+    errors,
+    qualityScore: Math.round(qualityScore),
+    isOutlier,
+    outlierReason
+  };
+}
+
 module.exports = {
   generateJobRunId,
   validateTokenPrice,
   validateLendingMarket,
   validateEtfFlow,
   validateStablecoinMcap,
+  validateProtocolTvlData,
   getPreviousPrice,
   insertIntoScrubTable,
   updateQualitySummary
