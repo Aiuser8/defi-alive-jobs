@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/dispatcher_lending_markets", 
-      "schedule": "15 */6 * * *"
+      "schedule": "15 * * * *"
     },
     {
       "path": "/api/dispatcher_liquidity_pools",
