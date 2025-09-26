@@ -44,13 +44,17 @@ module.exports = async (req, res) => {
     const batchPromises = batches.map(async (batch, index) => {
       console.log(`🔄 Starting batch ${index + 1}/${batches.length}: offset=${batch.offset}, limit=${batch.limit}`);
       
-      // Create mock request/response for the job
-      const mockReq = {
-        query: {
-          offset: batch.offset.toString(),
-          limit: batch.limit.toString()
-        }
-      };
+            // Create mock request/response for the job
+            const mockReq = {
+              query: {
+                offset: batch.offset.toString(),
+                limit: batch.limit.toString()
+              },
+              headers: {
+                host: 'localhost'
+              },
+              url: `/?offset=${batch.offset}&limit=${batch.limit}`
+            };
       
       let jobResult = null;
       
