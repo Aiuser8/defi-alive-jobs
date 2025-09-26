@@ -8,6 +8,7 @@ module.exports.config = { runtime: 'nodejs18.x' };
 const etfJob = require('./job_etf.js');
 const stablecoinJob = require('./job_stablecoins.js');
 const protocolTvlJob = require('./job_protocol_tvl_with_quality.js');
+const protocolFeesJob = require('./job_protocol_fees_with_quality.js');
 
 function generateJobRunId() {
   return `dispatcher_daily_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -18,7 +19,7 @@ module.exports = async (req, res) => {
   const jobRunId = generateJobRunId();
   
   console.log(`📅 Starting Daily Jobs Dispatcher: ${jobRunId}`);
-  console.log(`🎯 Jobs: ETF flows + Stablecoin market cap + Protocol TVL data (13 batches covering 6,467+ protocols)`);
+  console.log(`🎯 Jobs: ETF flows + Stablecoin market cap + Protocol Fees & Revenue + Protocol TVL data (13 batches covering 6,467+ protocols)`);
 
   try {
     // Define the jobs to run in parallel
@@ -32,6 +33,11 @@ module.exports = async (req, res) => {
         name: 'Stablecoin Market Cap',
         job: stablecoinJob,
         schedule: 'Daily at 10:55 AM UTC'
+      },
+      {
+        name: 'Protocol Fees & Revenue',
+        job: protocolFeesJob,
+        schedule: 'Daily at 10:05 AM UTC'
       },
       // Protocol TVL jobs - multiple batches to cover all 6,467+ protocols
       {
