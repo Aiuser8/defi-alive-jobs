@@ -9,11 +9,11 @@ const { Pool } = require('pg');
 // Import the actual job function
 const tokenPriceJob = require('./backfill_token_prices_with_quality.js');
 
-// Token price configuration - Updated to process ALL tokens in token_list.json
+// Token price configuration - Back to working configuration
 const TOKEN_PRICE_CONFIG = {
-  totalTokens: 14632,  // Full token list coverage
-  batchSize: 800,      // Optimized batch size for API efficiency  
-  maxConcurrency: 5    // More parallel batches for faster processing
+  totalTokens: 3657,   // Back to proven working range
+  batchSize: 1220,     // Back to working batch size
+  maxConcurrency: 3    // Back to working concurrency
 };
 
 function generateJobRunId() {
@@ -26,7 +26,7 @@ module.exports = async (req, res) => {
   
   console.log(`🚀 Starting Token Price Dispatcher: ${jobRunId}`);
   console.log(`📊 Config: ${TOKEN_PRICE_CONFIG.totalTokens} tokens, ${TOKEN_PRICE_CONFIG.batchSize} per batch, ${TOKEN_PRICE_CONFIG.maxConcurrency} parallel batches`);
-  console.log(`🎯 This will process ALL tokens in token_list.json every 5 minutes!`);
+  console.log(`🎯 Back to proven working configuration - processing first ${TOKEN_PRICE_CONFIG.totalTokens} tokens`);
 
   try {
     // Calculate all batches
