@@ -52,6 +52,8 @@ module.exports = async (req, res) => {
         }
       };
       
+      let jobResult = null;
+      
       const mockRes = {
         status: (code) => ({
           json: (data) => {
@@ -59,6 +61,7 @@ module.exports = async (req, res) => {
             if (data.metrics) {
               console.log(`   📊 ${data.metrics.totalRecords} records, ${data.metrics.cleanRecords} clean, ${data.metrics.scrubbedRecords} scrubbed`);
             }
+            jobResult = { code, data }; // Capture the actual result
             return { code, data };
           }
         })
@@ -66,7 +69,13 @@ module.exports = async (req, res) => {
 
       try {
         await tokenPriceJob(mockReq, mockRes);
-        return { batch: index + 1, success: true };
+        // Check the actual job success, not just if it completed without throwing
+        const actualSuccess = jobResult?.data?.success || false;
+        return { 
+          batch: index + 1, 
+          success: actualSuccess,
+          error: actualSuccess ? null : (jobResult?.data?.error || 'Job completed but reported failure')
+        };
       } catch (error) {
         console.error(`❌ Batch ${index + 1} failed:`, error.message);
         return { batch: index + 1, success: false, error: error.message };
