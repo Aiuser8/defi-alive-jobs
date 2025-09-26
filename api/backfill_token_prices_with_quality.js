@@ -195,12 +195,38 @@ module.exports = async (req, res) => {
             // Chart endpoint returns prices array, get the latest price
             const latestPrice = node?.prices?.[node.prices.length - 1];
             
-            if (!node || !latestPrice || typeof latestPrice.price !== 'number') {
-              // No data from API - treat as error
-              errorRecords++;
-              errorSummary['no_api_data'] = (errorSummary['no_api_data'] || 0) + 1;
-              continue;
-            }
+        if (!node || !latestPrice || typeof latestPrice.price !== 'number') {
+          // No data from API - insert into scrub table
+          errorRecords++;
+          errorSummary['no_api_data'] = (errorSummary['no_api_data'] || 0) + 1;
+          
+          // Create scrub data for tokens with no API data
+          const noDataScrub = {
+            coinId: id,
+            symbol: null,
+            confidence: null,
+            decimals: null,
+            tsSec: Math.floor(Date.now() / 1000),
+            price: null,
+            timestamp: Math.floor(Date.now() / 1000)
+          };
+          
+          const noDataValidation = {
+            isValid: false,
+            errors: ['no_api_data'],
+            qualityScore: 0,
+            isOutlier: false,
+            outlierReason: 'No price data available from API'
+          };
+          
+          try {
+            await insertIntoScrubTable(client, 'token_price_scrub', noDataScrub, noDataValidation, jobRunId, noDataScrub);
+            scrubbedRecords++;
+          } catch (scrubError) {
+            console.error(`Failed to insert no-data token into scrub:`, scrubError.message);
+          }
+          continue;
+        }
 
             const tsSec = Number.isFinite(latestPrice.timestamp) ? latestPrice.timestamp : Math.floor(Date.now() / 1000);
             const priceData = {
@@ -278,7 +304,11 @@ module.exports = async (req, res) => {
       await pool.end();
     }
 
+    // Consider job successful if we processed some tokens (even if some went to scrub)
+    const jobSuccess = totalRecords > 0 && (cleanRecords > 0 || scrubbedRecords > 0);
+    
     return res.status(200).json({
+      success: jobSuccess,
       job_run_id: jobRunId,
       date: new Date().toISOString(),
       offset, limit,
@@ -295,7 +325,12 @@ module.exports = async (req, res) => {
       processing_time_ms: Date.now() - startTime,
       
       // Error summary
-      error_summary: errorSummary
+      error_summary: errorSummary,
+      
+      // Success message
+      message: jobSuccess ? 
+        `Successfully processed ${totalRecords} tokens (${cleanRecords} clean, ${scrubbedRecords} scrubbed)` :
+        `Failed to process any tokens successfully`
     });
     
   } catch (e) {
@@ -319,6 +354,7 @@ module.exports = async (req, res) => {
     }
     
     return res.status(500).json({ 
+      success: false,
       job_run_id: jobRunId,
       error: e.message, 
       stack: e.stack 
