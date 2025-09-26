@@ -7,8 +7,6 @@ module.exports.config = { runtime: 'nodejs18.x' };
 const { Pool } = require('pg');
 const { 
   generateJobRunId,
-  validateLendingMarket,
-  insertIntoScrubTable,
   updateQualitySummary 
 } = require('./data_validation');
 
@@ -283,34 +281,15 @@ module.exports = async (req, res) => {
             pool_meta: poolData.poolMeta,
           };
 
-          // Validate the data
-          const validation = validateLendingMarket(lendingData);
-          
-          if (validation.isValid) {
-            // Clean data - goes to main table
+          // Skip validation - insert all data directly to clean table
+          // User will handle data quality manually later
+          try {
             await upsertLendingData(client, lendingData);
             cleanRecords++;
-          } else {
-            // Invalid data - goes to scrub table
-            await insertIntoScrubTable(
-              client,
-              'lending_market_scrub',
-              lendingData,
-              validation,
-              jobRunId,
-              poolData
-            );
-            
-            scrubbedRecords++;
-            
-            // Track error types
-            validation.errors.forEach(error => {
-              errorSummary[error] = (errorSummary[error] || 0) + 1;
-            });
-            
-            if (validation.isOutlier) {
-              outlierRecords++;
-            }
+          } catch (insertError) {
+            errorRecords++;
+            errorSummary['insert_error'] = (errorSummary['insert_error'] || 0) + 1;
+            console.error(`Failed to insert pool ${poolData.pool}:`, insertError.message);
           }
           
         } catch (poolError) {
@@ -349,9 +328,10 @@ module.exports = async (req, res) => {
     }
     
     console.log(`✅ Pro API lending collection completed successfully`);
-    console.log(`📊 Results: ${totalRecords} total, ${cleanRecords} clean, ${scrubbedRecords} scrubbed`);
+    console.log(`📊 Results: ${totalRecords} total, ${cleanRecords} inserted, ${errorRecords} errors`);
     console.log(`⏱️  Processing time: ${processingTime}ms`);
     console.log(`🎯 Success rate: ${successRate.toFixed(1)}%`);
+    console.log(`📝 Note: All data inserted directly to clean table (manual quality control)`);
 
     res.status(200).json({
       success: true,
@@ -359,9 +339,9 @@ module.exports = async (req, res) => {
       metrics: {
         totalRecords,
         cleanRecords,
-        scrubbedRecords,
+        scrubbedRecords: 0, // No longer using scrub table
         errorRecords,
-        outlierRecords,
+        outlierRecords: 0,  // No longer tracking outliers
         successRate: parseFloat(successRate.toFixed(1)),
         avgQualityScore: successRate,
         processingTime,
@@ -372,7 +352,7 @@ module.exports = async (req, res) => {
           totalPools: allPools.length
         }
       },
-      message: `Processed ${pools.length} lending pools with ${successRate.toFixed(1)}% success rate using Pro API`
+      message: `Processed ${pools.length} lending pools with ${successRate.toFixed(1)}% success rate using Pro API (direct insert)`
     });
 
   } catch (error) {
