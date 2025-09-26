@@ -128,8 +128,8 @@ module.exports = async (req, res) => {
     const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10));
     const limit  = Math.max(1, Math.min(2000, parseInt(url.searchParams.get('limit') || '500', 10)));
 
-    // Load token list (at repo root)
-    const filePath = path.join(process.cwd(), 'token_list.json');
+    // Load ACTIVE token list (filtered for tokens with fresh price data)
+    const filePath = path.join(process.cwd(), 'token_list_active.json');
     const entries = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     const slice = entries.slice(offset, offset + limit);
 
