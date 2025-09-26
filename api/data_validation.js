@@ -288,10 +288,12 @@ async function insertIntoScrubTable(client, tableName, data, validation, jobRunI
         scrubData.market_id = data.market_id;
       }
       if (data.ts !== undefined) {
-        scrubData.ts = data.ts;
+        // Convert Unix timestamp to ISO string for timestamp with time zone column
+        scrubData.ts = new Date(data.ts * 1000).toISOString();
       }
       if (data.timestamp !== undefined) {
-        scrubData.ts = data.timestamp; // Use timestamp as ts if ts not available
+        // Convert Unix timestamp to ISO string for timestamp with time zone column
+        scrubData.ts = new Date(data.timestamp * 1000).toISOString();
       }
       if (data.project) {
         scrubData.project = data.project;
