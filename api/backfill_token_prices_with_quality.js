@@ -1,5 +1,6 @@
 // api/backfill_token_prices_with_quality.js (CommonJS)
 // Live token price collection with data quality gates and scrub table routing
+// UPDATED: Now uses current prices endpoint for real-time data
 // Force Node runtime (pg not supported on Edge)
 module.exports.config = { runtime: 'nodejs18.x' };
 
@@ -43,15 +44,15 @@ function currentTimestampUnix() {
   return Math.floor(Date.now() / 1000);
 }
 
-async function fetchHistoricalForBatch(ts, coinIds, apiKey) {
+async function fetchCurrentPricesForBatch(coinIds, apiKey) {
   const coinsParam = encodeURIComponent(coinIds.join(','));
-  const url = `https://pro-api.llama.fi/${apiKey}/coins/prices/historical/${ts}/${coinsParam}`;
+  const url = `https://pro-api.llama.fi/${apiKey}/coins/chart/${coinsParam}`;
   const res = await fetch(url); // Node 18+ global fetch
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`${res.status} ${res.statusText}${text ? ` | ${text}` : ''}`);
   }
-  return res.json(); // { coins: { "<id>": { symbol, price, decimals, confidence, timestamp } } }
+  return res.json(); // { coins: { "<id>": { symbol, decimals, confidence, prices: [{timestamp, price}] } } }
 }
 
 async function upsertCleanBatch(client, records) {
@@ -150,7 +151,6 @@ module.exports = async (req, res) => {
       return res.status(200).json({ message: 'All tokens in slice invalid.', offset, limit, skipped });
     }
 
-    const ts = currentTimestampUnix();
     const BATCH_SIZE = 25;
     const SLEEP_MS = 120;
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -183,7 +183,7 @@ module.exports = async (req, res) => {
 
       for (const group of chunk(coinIds, BATCH_SIZE)) {
         try {
-          const data = await fetchHistoricalForBatch(ts, group, DEFILLAMA_API_KEY);
+          const data = await fetchCurrentPricesForBatch(group, DEFILLAMA_API_KEY);
           const nodes = data?.coins || {};
           const cleanBatch = [];
           const scrubBatch = [];
@@ -192,21 +192,24 @@ module.exports = async (req, res) => {
             totalRecords++;
             const node = nodes[id];
             
-            if (!node || typeof node.price !== 'number') {
+            // Chart endpoint returns prices array, get the latest price
+            const latestPrice = node?.prices?.[node.prices.length - 1];
+            
+            if (!node || !latestPrice || typeof latestPrice.price !== 'number') {
               // No data from API - treat as error
               errorRecords++;
               errorSummary['no_api_data'] = (errorSummary['no_api_data'] || 0) + 1;
               continue;
             }
 
-            const tsSec = Number.isFinite(node.timestamp) ? node.timestamp : ts;
+            const tsSec = Number.isFinite(latestPrice.timestamp) ? latestPrice.timestamp : Math.floor(Date.now() / 1000);
             const priceData = {
               coinId: id,
               symbol: node.symbol ?? null,
               confidence: node.confidence ?? null,
               decimals: node.decimals ?? null,
               tsSec,
-              price: node.price,
+              price: latestPrice.price,
               timestamp: tsSec
             };
 
