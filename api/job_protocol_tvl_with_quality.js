@@ -167,7 +167,7 @@ module.exports = async (req, res) => {
         cleanRecords,
         scrubbedRecords,
         successRate: parseFloat(successRate.toFixed(1)),
-        avgQualityScore,
+        avgQualityScore: successRate,
         processingTime,
         protocolsProcessed: protocolsBatch.length,
         batchInfo: {
