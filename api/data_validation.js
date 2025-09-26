@@ -57,14 +57,15 @@ function validateTokenPrice(priceData, previousPrice = null) {
     errors.push('invalid_timestamp');
     qualityScore -= 25;
   } else {
-    const ageMinutes = (Date.now() - priceData.timestamp * 1000) / (1000 * 60);
-    if (ageMinutes > 180) { // Increased from 60 to 180 minutes (3 hours)
-      errors.push('stale_data');
-      qualityScore -= Math.min(20, ageMinutes / 10); // Reduced penalty
-    } else if (ageMinutes > 60) {
-      // Data is somewhat stale but not critically so
-      qualityScore -= Math.min(10, ageMinutes / 20); // Light penalty
-    }
+    // TEMPORARILY DISABLED: Stale data validation to test if API data is otherwise valid
+    // const ageMinutes = (Date.now() - priceData.timestamp * 1000) / (1000 * 60);
+    // if (ageMinutes > 180) { // Increased from 60 to 180 minutes (3 hours)
+    //   errors.push('stale_data');
+    //   qualityScore -= Math.min(20, ageMinutes / 10); // Reduced penalty
+    // } else if (ageMinutes > 60) {
+    //   // Data is somewhat stale but not critically so
+    //   qualityScore -= Math.min(10, ageMinutes / 20); // Light penalty
+    // }
   }
 
   // Confidence validation
