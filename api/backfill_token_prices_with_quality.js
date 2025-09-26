@@ -280,7 +280,7 @@ module.exports = async (req, res) => {
 
     return res.status(200).json({
       job_run_id: jobRunId,
-      date: new Date(ts * 1000).toISOString(),
+      date: new Date().toISOString(),
       offset, limit,
       
       // Quality metrics
