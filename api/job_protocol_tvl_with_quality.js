@@ -158,20 +158,12 @@ module.exports = async (req, res) => {
         }
       }
 
-      // Update quality summary before releasing client
+      // Calculate final metrics
       successRate = totalRecords > 0 ? (cleanRecords / totalRecords) * 100 : 0;
       processingTime = Date.now() - startTime;
       
-      await updateQualitySummary(client, 'job_protocol_tvl', jobRunId, {
-        totalRecords,
-        cleanRecords,
-        scrubbedRecords,
-        errorRecords: errors.length,
-        outlierRecords: scrubbedRecords, // Approximation
-        overallQualityScore: successRate,
-        processingTimeMs: processingTime,
-        errorSummary: errors
-      });
+      // Skip quality summary for now to avoid timeout issues
+      console.log('📊 Skipping quality summary to avoid timeouts');
 
     } finally {
       client.release();
@@ -206,23 +198,8 @@ module.exports = async (req, res) => {
     processingTime = Date.now() - startTime;
     console.error(`❌ Protocol TVL collection job failed:`, error.message);
     
-    try {
-      const pool = makePoolFromEnv();
-      const client = await pool.connect();
-      await updateQualitySummary(client, 'job_protocol_tvl', jobRunId, {
-        totalRecords,
-        cleanRecords,
-        scrubbedRecords,
-        errorRecords: errors.length + 1,
-        outlierRecords: scrubbedRecords,
-        overallQualityScore: 0,
-        processingTimeMs: processingTime,
-        errorSummary: [...errors, `job_failure: ${error.message}`]
-      });
-      client.release();
-    } catch (summaryError) {
-      console.error('Failed to update quality summary:', summaryError.message);
-    }
+    // Skip quality summary in error case to avoid further issues
+    console.log('📊 Skipping error quality summary to avoid additional timeouts');
 
     res.status(500).json({
       success: false,
