@@ -2,11 +2,10 @@
   "crons": [
     { "path": "/api/job_etf", "schedule": "5 10 * * *" },
     
-    { "path": "/api/job_lending_with_quality?offset=0&limit=400", "schedule": "0 */6 * * *" },
-    { "path": "/api/job_lending_with_quality?offset=400&limit=400", "schedule": "10 */6 * * *" },
-    { "path": "/api/job_lending_with_quality?offset=800&limit=400", "schedule": "20 */6 * * *" },
-    { "path": "/api/job_lending_with_quality?offset=1200&limit=400", "schedule": "30 */6 * * *" },
-    { "path": "/api/job_lending_with_quality?offset=1600&limit=400", "schedule": "40 */6 * * *" },
+    { "path": "/api/job_lending_with_quality?offset=0&limit=500", "schedule": "0 */6 * * *" },
+    { "path": "/api/job_lending_with_quality?offset=500&limit=500", "schedule": "15 */6 * * *" },
+    { "path": "/api/job_lending_with_quality?offset=1000&limit=500", "schedule": "30 */6 * * *" },
+    { "path": "/api/job_lending_with_quality?offset=1500&limit=500", "schedule": "45 */6 * * *" },
     
     { "path": "/api/job_stablecoins", "schedule": "55 10 * * *" },
     
