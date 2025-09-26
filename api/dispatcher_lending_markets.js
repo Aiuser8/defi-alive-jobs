@@ -4,14 +4,14 @@
 
 module.exports.config = { runtime: 'nodejs18.x' };
 
-// Import the actual job function
-const lendingJob = require('./job_lending_with_quality.js');
+// Import the actual job function (Pro API version)
+const lendingJob = require('./job_lending_pro_api.js');
 
-// Lending market configuration
+// Lending market configuration (Pro API)
 const LENDING_CONFIG = {
-  totalMarkets: 2000, // Approximate total markets
-  batchSize: 500,
-  maxConcurrency: 4 // Run 4 batches in parallel
+  totalMarkets: 1914, // Actual total from Pro API /yields/poolsBorrow
+  batchSize: 479,     // 1914 / 4 = ~479 per batch
+  maxConcurrency: 4   // Run 4 batches in parallel
 };
 
 function generateJobRunId() {
@@ -22,8 +22,9 @@ module.exports = async (req, res) => {
   const startTime = Date.now();
   const jobRunId = generateJobRunId();
   
-  console.log(`🏦 Starting Lending Market Dispatcher: ${jobRunId}`);
+  console.log(`🏦 Starting Lending Market Dispatcher (Pro API): ${jobRunId}`);
   console.log(`📊 Config: ${LENDING_CONFIG.totalMarkets} markets, ${LENDING_CONFIG.batchSize} per batch, ${LENDING_CONFIG.maxConcurrency} parallel batches`);
+  console.log(`🚀 Using Pro API /yields/poolsBorrow for live lending data`);
 
   try {
     // Calculate all batches
