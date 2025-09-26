@@ -18,7 +18,7 @@ module.exports = async (req, res) => {
   const jobRunId = generateJobRunId();
   
   console.log(`📅 Starting Daily Jobs Dispatcher: ${jobRunId}`);
-  console.log(`🎯 Jobs: ETF flows + Stablecoin market cap + Protocol TVL data`);
+  console.log(`🎯 Jobs: ETF flows + Stablecoin market cap + Protocol TVL data (13 batches covering 6,467+ protocols)`);
 
   try {
     // Define the jobs to run in parallel
@@ -33,11 +33,84 @@ module.exports = async (req, res) => {
         job: stablecoinJob,
         schedule: 'Daily at 10:55 AM UTC'
       },
+      // Protocol TVL jobs - multiple batches to cover all 6,467+ protocols
       {
-        name: 'Protocol TVL',
+        name: 'Protocol TVL Batch 1',
         job: protocolTvlJob,
         schedule: 'Daily at 10:05 AM UTC',
-        params: { offset: '0', limit: '100' } // Start with small batch
+        params: { offset: '0', limit: '500' }
+      },
+      {
+        name: 'Protocol TVL Batch 2', 
+        job: protocolTvlJob,
+        schedule: 'Daily at 10:05 AM UTC',
+        params: { offset: '500', limit: '500' }
+      },
+      {
+        name: 'Protocol TVL Batch 3',
+        job: protocolTvlJob,
+        schedule: 'Daily at 10:05 AM UTC', 
+        params: { offset: '1000', limit: '500' }
+      },
+      {
+        name: 'Protocol TVL Batch 4',
+        job: protocolTvlJob,
+        schedule: 'Daily at 10:05 AM UTC',
+        params: { offset: '1500', limit: '500' }
+      },
+      {
+        name: 'Protocol TVL Batch 5',
+        job: protocolTvlJob,
+        schedule: 'Daily at 10:05 AM UTC',
+        params: { offset: '2000', limit: '500' }
+      },
+      {
+        name: 'Protocol TVL Batch 6',
+        job: protocolTvlJob,
+        schedule: 'Daily at 10:05 AM UTC',
+        params: { offset: '2500', limit: '500' }
+      },
+      {
+        name: 'Protocol TVL Batch 7',
+        job: protocolTvlJob,
+        schedule: 'Daily at 10:05 AM UTC',
+        params: { offset: '3000', limit: '500' }
+      },
+      {
+        name: 'Protocol TVL Batch 8',
+        job: protocolTvlJob,
+        schedule: 'Daily at 10:05 AM UTC',
+        params: { offset: '3500', limit: '500' }
+      },
+      {
+        name: 'Protocol TVL Batch 9',
+        job: protocolTvlJob,
+        schedule: 'Daily at 10:05 AM UTC',
+        params: { offset: '4000', limit: '500' }
+      },
+      {
+        name: 'Protocol TVL Batch 10',
+        job: protocolTvlJob,
+        schedule: 'Daily at 10:05 AM UTC',
+        params: { offset: '4500', limit: '500' }
+      },
+      {
+        name: 'Protocol TVL Batch 11',
+        job: protocolTvlJob,
+        schedule: 'Daily at 10:05 AM UTC',
+        params: { offset: '5000', limit: '500' }
+      },
+      {
+        name: 'Protocol TVL Batch 12',
+        job: protocolTvlJob,
+        schedule: 'Daily at 10:05 AM UTC',
+        params: { offset: '5500', limit: '500' }
+      },
+      {
+        name: 'Protocol TVL Batch 13',
+        job: protocolTvlJob,
+        schedule: 'Daily at 10:05 AM UTC',
+        params: { offset: '6000', limit: '467' } // Final batch covers remaining protocols
       }
     ];
 
