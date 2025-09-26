@@ -10,6 +10,17 @@
     
     { "path": "/api/job_stablecoins", "schedule": "55 10 * * *" },
     
+    { "path": "/api/job_liquidity_pools_with_quality?offset=0&limit=2000", "schedule": "0 * * * *" },
+    { "path": "/api/job_liquidity_pools_with_quality?offset=2000&limit=2000", "schedule": "6 * * * *" },
+    { "path": "/api/job_liquidity_pools_with_quality?offset=4000&limit=2000", "schedule": "12 * * * *" },
+    { "path": "/api/job_liquidity_pools_with_quality?offset=6000&limit=2000", "schedule": "18 * * * *" },
+    { "path": "/api/job_liquidity_pools_with_quality?offset=8000&limit=2000", "schedule": "24 * * * *" },
+    { "path": "/api/job_liquidity_pools_with_quality?offset=10000&limit=2000", "schedule": "30 * * * *" },
+    { "path": "/api/job_liquidity_pools_with_quality?offset=12000&limit=2000", "schedule": "36 * * * *" },
+    { "path": "/api/job_liquidity_pools_with_quality?offset=14000&limit=2000", "schedule": "42 * * * *" },
+    { "path": "/api/job_liquidity_pools_with_quality?offset=16000&limit=2000", "schedule": "48 * * * *" },
+    { "path": "/api/job_liquidity_pools_with_quality?offset=18000&limit=2000", "schedule": "54 * * * *" },
+    
     { "path": "/api/backfill_token_prices_with_quality?offset=0&limit=500", "schedule": "*/5 * * * *" },
     { "path": "/api/backfill_token_prices_with_quality?offset=500&limit=500", "schedule": "1,6,11,16,21,26,31,36,41,46,51,56 * * * *" },
     { "path": "/api/backfill_token_prices_with_quality?offset=1000&limit=500", "schedule": "2,7,12,17,22,27,32,37,42,47,52,57 * * * *" },

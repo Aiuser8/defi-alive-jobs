@@ -286,6 +286,35 @@ async function insertIntoScrubTable(client, tableName, data, validation, jobRunI
     if (tableName === 'lending_market_scrub' && data.market_id) {
       scrubData.market_id = data.market_id;
     }
+    if (tableName === 'cl_pool_hist_scrub') {
+      if (data.pool_id) {
+        scrubData.pool_id = data.pool_id;
+      }
+      if (data.ts) {
+        scrubData.ts = data.ts;
+      }
+      if (data.project) {
+        scrubData.project = data.project;
+      }
+      if (data.chain) {
+        scrubData.chain = data.chain;
+      }
+      if (data.symbol) {
+        scrubData.symbol = data.symbol;
+      }
+      if (data.tvl_usd !== undefined) {
+        scrubData.tvl_usd = data.tvl_usd;
+      }
+      if (data.apy !== undefined) {
+        scrubData.apy = data.apy;
+      }
+      if (data.apy_base !== undefined) {
+        scrubData.apy_base = data.apy_base;
+      }
+      if (data.url) {
+        scrubData.url = data.url;
+      }
+    }
 
     // Remove undefined values
     const cleanData = Object.fromEntries(

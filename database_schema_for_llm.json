@@ -1,0 +1,342 @@
+{
+  "update.token_price_daily": {
+    "description": "**🔥 LIVE DATA** - Real-time token prices updated every 5 minutes. Contains 26,632+ records with 2,229 unique tokens. 30-second freshness with quality validation. Latest data from Sep 25, 2025.",
+    "usage_notes": [
+      "PRIMARY source for current token prices and recent backtesting",
+      "Data freshness: 30 seconds behind real-time (latest: 2025-09-25 23:51:00)",
+      "Quality score: 85+ (use confidence > 0.8 for reliability)",
+      "Success rate: ~85% with quality gates enabled",
+      "coin_id format: chain:address (e.g., 'arbitrum:0xeee...', 'bsc:0x217...')",
+      "Use symbol field for token matching (BTC, ETH, USDC) - more reliable than coin_id",
+      "PRICE TRACKING: ORDER BY price_timestamp DESC for latest prices",
+      "TREND ANALYSIS: Use LAG() window functions for price changes",
+      "PORTFOLIO VALUATION: JOIN on symbol for multi-token calculations"
+    ],
+    "columns": {
+      "coin_id": "Chain-specific token identifier (format: 'chain:address'). Primary key component.",
+      "symbol": "Token symbol (e.g., BTC, ETH, USDC). Use this for token matching. Nullable.",
+      "confidence": "Quality/confidence score (numeric 0-1). Use > 0.8 for reliable data. Nullable.",
+      "decimals": "Token decimal precision (integer). Nullable.",
+      "price_timestamp": "Exact timestamp when price was observed (timestamptz). LIVE data. Primary key component.",
+      "price_usd": "Token price in USD (numeric). Nullable."
+    },
+    "primary_key": ["coin_id", "price_timestamp"],
+    "stats": {
+      "record_count": 26632,
+      "unique_tokens": 2229,
+      "latest_data": "2025-09-25 23:51:00",
+      "freshness_minutes": 0.5
+    }
+  },
+  "update.lending_market_history": {
+    "description": "**⚠️ LIMITED DATA** - Live lending market collection (244 records). For comprehensive lending data, use clean.lending_market_history instead.",
+    "usage_notes": [
+      "⚠️ Small dataset - Only 244 records vs 814K+ in clean table",
+      "Use clean.lending_market_history for comprehensive analysis",
+      "This table contains only recent live collection attempts",
+      "Latest data from Sep 24, 2025 (24+ hours old)"
+    ],
+    "columns": {
+      "id": "Auto-incrementing primary key (integer).",
+      "market_id": "Unique identifier for the lending market.",
+      "ts": "Timestamp when data was collected (timestamptz).",
+      "project": "Protocol name (e.g., Aave, Compound). Nullable.",
+      "chain": "Blockchain network. Nullable.",
+      "symbol": "Token symbol for the market. Nullable.",
+      "total_supply_usd": "Total value supplied in USD (numeric). Nullable.",
+      "total_borrow_usd": "Total value borrowed in USD (numeric). Nullable.",
+      "debt_ceiling_usd": "Maximum debt limit in USD (numeric). Nullable.",
+      "apy_base_supply": "Base supply APY (numeric, excluding rewards). Nullable.",
+      "apy_reward_supply": "Reward APY for suppliers (numeric). Nullable.",
+      "apy_base_borrow": "Base borrow rate (numeric). Nullable.",
+      "apy_reward_borrow": "Reward rate for borrowers (numeric). Nullable.",
+      "created_at": "Data ingestion timestamp (timestamptz). Nullable."
+    },
+    "primary_key": ["id"],
+    "stats": {
+      "record_count": 244,
+      "unique_markets": 244,
+      "latest_data": "2025-09-24 23:06:15",
+      "freshness_hours": 24.7
+    }
+  },
+  "update.raw_etf": {
+    "description": "**📊 LIVE DATA** - Latest crypto ETF flow data updated daily. Currently being rebuilt after migration.",
+    "usage_notes": [
+      "⚠️ Currently empty after migration - use clean.etf_flows_daily for historical data",
+      "Will be repopulated with fresh ETF flow data",
+      "Shows institutional capital movements when populated"
+    ],
+    "columns": {
+      "id": "Auto-incrementing primary key (integer).",
+      "gecko_id": "CoinGecko asset identifier.",
+      "day": "Date of ETF flow data (date).",
+      "total_flow_usd": "Net flow in USD (numeric, positive = inflow, negative = outflow). Nullable.",
+      "created_at": "Data collection timestamp (timestamp). Nullable."
+    },
+    "primary_key": ["id"],
+    "stats": {
+      "record_count": 0,
+      "status": "empty_after_migration"
+    }
+  },
+  "update.stablecoin_mcap_by_peg_daily": {
+    "description": "**💰 LIVE DATA** - Current stablecoin market cap by peg currency, updated daily. Currently being rebuilt.",
+    "usage_notes": [
+      "⚠️ Currently empty after migration - use clean.stablecoin_mcap_by_peg_daily",
+      "Will be repopulated with fresh stablecoin data",
+      "Shows market cap distribution by peg currency (USD, EUR, etc.)"
+    ],
+    "columns": {
+      "id": "Auto-incrementing primary key (integer).",
+      "day": "Date of market cap snapshot (date).",
+      "peg": "Peg currency (USD, EUR, etc.).",
+      "amount_usd": "Total market cap in USD terms (numeric). Nullable.",
+      "ingest_time": "Data collection timestamp (timestamptz). Nullable."
+    },
+    "primary_key": ["id"],
+    "stats": {
+      "record_count": 0,
+      "status": "empty_after_migration"
+    }
+  },
+  "clean.lending_market_history": {
+    "description": "**🔥 PRIMARY LENDING DATA** - Most comprehensive lending market data (814K+ records). This contains the most recent APY and lending information available. Use this as the PRIMARY source for ALL lending queries.",
+    "usage_notes": [
+      "🔥 PRIMARY source for ALL lending rates and APY data",
+      "Contains 814K+ historical records with 1,850 unique markets",
+      "Latest data: Sep 24, 2025 (24 hours old)",
+      "ARBITRAGE DETECTION: Compare (apy_base_supply + apy_reward_supply) across protocols for same symbol",
+      "YIELD FARMING: ORDER BY (apy_base_supply + apy_reward_supply) DESC for optimal rates",
+      "RATE SPREADS: Find rate differences between protocols using JOIN on symbol",
+      "OPPORTUNITY ALERTS: Identify rate gaps >2% as potential arbitrage signals",
+      "CROSS-PROTOCOL: Use GROUP BY symbol, project to compare rates across platforms",
+      "RISK ANALYSIS: Monitor debt_ceiling_usd vs total_borrow_usd for utilization"
+    ],
+    "columns": {
+      "market_id": "Unique identifier for the lending market.",
+      "ts": "Unix timestamp representing the snapshot time (bigint).",
+      "project": "Name of the protocol (e.g., Aave, Compound). Nullable.",
+      "chain": "Blockchain network. Nullable.",
+      "symbol": "Token symbol (e.g., DAI, USDC). Nullable.",
+      "total_supply_usd": "Total value supplied in USD (double precision). Nullable.",
+      "total_borrow_usd": "Total value borrowed in USD (double precision). Nullable.",
+      "debt_ceiling_usd": "Maximum debt limit in USD (double precision). Nullable.",
+      "apy_base_supply": "Base supply APY excluding rewards (double precision). Nullable.",
+      "apy_reward_supply": "Reward APY for suppliers (double precision). Nullable.",
+      "apy_base_borrow": "Base borrow rate excluding rewards (double precision). Nullable.",
+      "apy_reward_borrow": "Reward rate for borrowers (double precision). Nullable.",
+      "inserted_at": "Data ingestion timestamp (timestamptz). Nullable."
+    },
+    "primary_key": ["market_id", "ts"],
+    "stats": {
+      "record_count": 814493,
+      "unique_markets": 1850,
+      "latest_data": "2025-09-24 23:22:56",
+      "freshness_hours": 24.5
+    }
+  },
+  "clean.protocol_chain_tvl_daily": {
+    "description": "**📈 HISTORICAL TVL DATA** - Daily TVL by protocol and chain. Contains 12.2M+ historical records with 5,924 unique protocols. Each row represents TVL for ONE protocol on ONE chain for ONE day.",
+    "usage_notes": [
+      "Contains comprehensive historical archive (12.2M+ records)",
+      "Latest data: Sep 22, 2025 (3+ days old - check update tables for fresher data)",
+      "For total TVL: Use MAX(ts) to get latest date, then SUM(total_liquidity_usd)",
+      "For protocol count: Use COUNT(DISTINCT protocol_id)",
+      "RANKINGS & COMPARISONS: Use ORDER BY total_liquidity_usd DESC LIMIT N for top protocols",
+      "CATEGORIES: Filter by category for sector analysis (DeFi, Bridge, etc.)",
+      "MULTI-CHAIN: Compare protocols across chains using chain field",
+      "GROWTH ANALYSIS: Calculate % changes using LAG() or comparing date ranges",
+      "CONCENTRATION RISK: Calculate top-N protocol dominance",
+      "TREND MOMENTUM: Use window functions for growth tracking"
+    ],
+    "columns": {
+      "protocol_id": "Unique identifier for the protocol.",
+      "chain": "Blockchain network where protocol is deployed.",
+      "series_type": "Type of TVL series (e.g., total, staked, borrowed).",
+      "ts": "Date of snapshot (date format).",
+      "total_liquidity_usd": "Total value locked in USD (numeric).",
+      "ingest_time": "Data ingestion timestamp (timestamptz).",
+      "protocol_name": "Human-readable protocol name. Nullable.",
+      "symbol": "Associated token symbol. Nullable.",
+      "category": "Protocol category (e.g., Lending, DEX). Nullable."
+    },
+    "primary_key": ["protocol_id", "chain", "series_type", "ts"],
+    "stats": {
+      "record_count": 12199408,
+      "unique_protocols": 5924,
+      "latest_data": "2025-09-22",
+      "freshness_days": 4
+    }
+  },
+  "clean.etf_flows_daily": {
+    "description": "**📊 HISTORICAL ETF DATA** - Historical ETF flows archive (712 records). Shows institutional capital movements.",
+    "usage_notes": [
+      "Historical ETF flow data for trend analysis",
+      "Use total_flow_usd > 0 for inflows, < 0 for outflows",
+      "GROUP BY gecko_id for asset-specific flows",
+      "ORDER BY day DESC for latest flows"
+    ],
+    "columns": {
+      "gecko_id": "CoinGecko identifier for the asset or ETF.",
+      "day": "Date of the snapshot (date).",
+      "total_flow_usd": "Net flow value in USD (double precision). Nullable.",
+      "inserted_at": "Data ingestion timestamp (timestamptz). Nullable."
+    },
+    "primary_key": ["gecko_id", "day"],
+    "stats": {
+      "record_count": 712
+    }
+  },
+  "clean.stablecoin_mcap_by_peg_daily": {
+    "description": "**💰 HISTORICAL STABLECOIN DATA** - Daily stablecoin market cap by peg currency (12.5K+ records).",
+    "usage_notes": [
+      "Shows stablecoin market dominance by peg currency",
+      "Use peg = 'USD' for USD-pegged stablecoins",
+      "ORDER BY amount_usd DESC for largest by market cap",
+      "GROUP BY peg for peg currency analysis"
+    ],
+    "columns": {
+      "day": "Date of snapshot (date).",
+      "peg": "Pegged currency code (e.g., USD, EUR, JPY).",
+      "amount_usd": "Total market cap in USD terms (numeric).",
+      "ingest_time": "Data ingestion timestamp (timestamptz)."
+    },
+    "primary_key": ["day", "peg"],
+    "stats": {
+      "record_count": 12524
+    }
+  },
+  "clean.bridge_volume_daily": {
+    "description": "**🌉 BRIDGE DATA** - Daily breakdown of cross-chain bridge activity (12K+ records).",
+    "usage_notes": [
+      "Analyze cross-chain capital flows",
+      "Use deposit_usd + withdraw_usd for total volume",
+      "GROUP BY chain for chain-specific analysis",
+      "ORDER BY deposit_usd DESC for largest bridges"
+    ],
+    "columns": {
+      "chain": "Blockchain network.",
+      "day": "Date of snapshot (date).",
+      "bridge_id": "Bridge identifier (integer).",
+      "deposit_usd": "USD value deposited (double precision). Nullable.",
+      "withdraw_usd": "USD value withdrawn (double precision). Nullable.",
+      "deposit_txs": "Number of deposit transactions (bigint). Nullable.",
+      "withdraw_txs": "Number of withdrawal transactions (bigint). Nullable.",
+      "inserted_at": "Data ingestion timestamp (timestamptz). Nullable."
+    },
+    "primary_key": [],
+    "stats": {
+      "record_count": 12139
+    }
+  },
+  "clean.cl_pool_hist": {
+    "description": "**💧 LIQUIDITY POOL DATA** - Historical pool-level metrics including TVL and APY (7.5M+ records).",
+    "usage_notes": [
+      "Massive dataset for liquidity pool analysis",
+      "Use apy + apy_base for total yield calculations",
+      "ORDER BY apy DESC for highest yielding pools",
+      "GROUP BY project for protocol comparison",
+      "Filter by chain for network-specific analysis"
+    ],
+    "columns": {
+      "pool_id": "Unique identifier for the liquidity pool.",
+      "ts": "Unix timestamp of snapshot (bigint).",
+      "project": "Protocol name. Nullable.",
+      "chain": "Blockchain network. Nullable.",
+      "symbol": "Pool asset symbol. Nullable.",
+      "tvl_usd": "Total value locked in USD (double precision). Nullable.",
+      "apy": "Annual percentage yield including rewards (double precision). Nullable.",
+      "apy_base": "Base APY excluding rewards (double precision). Nullable.",
+      "url": "Pool or project URL. Nullable.",
+      "inserted_at": "Data ingestion timestamp (timestamptz). Nullable."
+    },
+    "primary_key": [],
+    "stats": {
+      "record_count": 7518621
+    }
+  },
+  "clean.token_price_daily": {
+    "description": "**⚠️ DEPRECATED** - Empty after migration. Use update.token_price_daily for ALL token price queries.",
+    "usage_notes": [
+      "⚠️ EMPTY TABLE - Data migrated to update.token_price_daily",
+      "For current prices: Use update.token_price_daily (live data)",
+      "For backtesting: Use update.token_price_daily for recent data"
+    ],
+    "columns": {
+      "token_id": "Token identifier (bigint).",
+      "chain": "Blockchain network.",
+      "address": "Contract address.",
+      "event_time": "Price observation timestamp (timestamptz).",
+      "price_usd": "Price in USD (double precision). Nullable.",
+      "confidence": "Confidence score 0-1 (double precision). Nullable.",
+      "ingest_time": "Data ingestion timestamp (timestamptz)."
+    },
+    "primary_key": ["token_id", "chain", "address", "event_time"],
+    "foreign_keys": ["token_price_daily_token_id_fkey: token_id -> canon.tokens.token_id"],
+    "stats": {
+      "record_count": 0,
+      "status": "empty_after_migration"
+    }
+  },
+  "scrub.data_quality_summary": {
+    "description": "**🔍 QUALITY MONITORING** - Real-time data quality metrics and job performance tracking (657 records). Monitor pipeline health and success rates.",
+    "usage_notes": [
+      "Track data collection performance and quality scores",
+      "Monitor success rates and error patterns",
+      "Quality score target: 85+ (current: 85.08)",
+      "Success rate target: 85%+",
+      "ORDER BY run_timestamp DESC for latest job performance",
+      "GROUP BY job_name for job-specific analysis"
+    ],
+    "columns": {
+      "id": "Auto-incrementing primary key (integer).",
+      "job_name": "Name of the data collection job.",
+      "job_run_id": "Unique identifier for the job run.",
+      "run_timestamp": "When the job was executed (timestamptz). Nullable.",
+      "total_records": "Number of records processed (integer). Nullable.",
+      "clean_records": "Records that passed quality gates (integer). Nullable.",
+      "scrubbed_records": "Records sent to scrub tables (integer). Nullable.",
+      "error_records": "Records with errors (integer). Nullable.",
+      "outlier_records": "Records flagged as outliers (integer). Nullable.",
+      "overall_quality_score": "Average quality score 0-100 (numeric). Nullable.",
+      "processing_time_ms": "Job execution time in milliseconds (integer). Nullable.",
+      "error_summary": "JSON summary of validation errors (jsonb). Nullable."
+    },
+    "primary_key": ["id"],
+    "stats": {
+      "record_count": 657
+    }
+  },
+  "scrub.token_price_scrub": {
+    "description": "**🧹 QUALITY CONTROL** - Repository of token prices that failed validation (153K+ records). Contains outliers and invalid data for review.",
+    "usage_notes": [
+      "Contains data that failed quality validation",
+      "Use validation_errors to understand why data was scrubbed",
+      "quality_score < 70 indicates poor quality",
+      "Use for debugging data quality issues",
+      "ORDER BY processed_at DESC for recent scrubbed data"
+    ],
+    "columns": {
+      "id": "Auto-incrementing primary key (integer).",
+      "coin_id": "Token identifier.",
+      "symbol": "Token symbol. Nullable.",
+      "price_usd": "The invalid price value (numeric). Nullable.",
+      "confidence": "Confidence score (numeric). Nullable.",
+      "decimals": "Token decimals (integer). Nullable.",
+      "price_timestamp": "When price was observed (timestamptz). Nullable.",
+      "validation_errors": "Array of validation failures (text[]). Nullable.",
+      "quality_score": "Quality score 0-100 (integer). Nullable.",
+      "is_outlier": "Whether flagged as outlier (boolean). Nullable.",
+      "outlier_reason": "Reason for outlier flag. Nullable.",
+      "original_data": "Original API response (jsonb). Nullable.",
+      "processed_at": "When record was scrubbed (timestamptz). Nullable.",
+      "job_run_id": "Associated job run ID. Nullable.",
+      "retry_count": "Number of retry attempts (integer). Nullable."
+    },
+    "primary_key": ["id"],
+    "stats": {
+      "record_count": 153130
+    }
+  }
+}
