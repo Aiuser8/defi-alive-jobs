@@ -21,8 +21,84 @@ async function updateQualitySummary(client, jobName, jobRunId, metrics) {
   console.log(`📊 Quality summary for ${jobName}: ${JSON.stringify(metrics)}`);
 }
 
+/**
+ * Validate protocol TVL data (minimal implementation)
+ */
+function validateProtocolTvlData(tvlData) {
+  // Accept all valid data
+  if (!tvlData || typeof tvlData !== 'object') {
+    return {
+      isValid: false,
+      errors: ['invalid_data'],
+      qualityScore: 0,
+      isOutlier: false,
+      outlierReason: null
+    };
+  }
+
+  // Accept all valid protocol data
+  return {
+    isValid: true,
+    errors: [],
+    qualityScore: 100,
+    isOutlier: false,
+    outlierReason: null
+  };
+}
+
+/**
+ * Validate liquidity pool data (minimal implementation)
+ */
+function validatePoolData(poolData) {
+  // Accept all valid data
+  if (!poolData || typeof poolData !== 'object') {
+    return {
+      isValid: false,
+      errors: ['invalid_data'],
+      qualityScore: 0,
+      isOutlier: false,
+      outlierReason: null
+    };
+  }
+
+  return {
+    isValid: true,
+    errors: [],
+    qualityScore: 100,
+    isOutlier: false,
+    outlierReason: null
+  };
+}
+
+/**
+ * Validate lending market data (minimal implementation)
+ */
+function validateLendingMarket(lendingData) {
+  // Accept all valid data
+  if (!lendingData || typeof lendingData !== 'object') {
+    return {
+      isValid: false,
+      errors: ['invalid_data'],
+      qualityScore: 0,
+      isOutlier: false,
+      outlierReason: null
+    };
+  }
+
+  return {
+    isValid: true,
+    errors: [],
+    qualityScore: 100,
+    isOutlier: false,
+    outlierReason: null
+  };
+}
+
 module.exports = {
   generateJobRunId,
   insertIntoScrubTable,
-  updateQualitySummary
+  updateQualitySummary,
+  validateProtocolTvlData,
+  validatePoolData,
+  validateLendingMarket
 };
