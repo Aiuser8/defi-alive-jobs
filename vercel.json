@@ -23,6 +23,10 @@
     {
       "path": "/api/job_perp_funding_rates",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/job_tvl_defi_daily",
+      "schedule": "30 11 * * *"
     }
   ],
   "functions": {
