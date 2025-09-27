@@ -7,11 +7,11 @@ module.exports.config = { runtime: 'nodejs18.x' };
 // Import the actual job function
 const poolJob = require('./job_liquidity_pools_with_quality.js');
 
-// Pool configuration
+// Pool configuration - OPTIMIZED to prevent timeouts
 const POOL_CONFIG = {
-  totalPools: 20000, // Approximate total pools
-  batchSize: 2000,
-  maxConcurrency: 10 // Run 10 batches in parallel (same as current)
+  totalPools: 19200, // Actual pools observed: ~19,159
+  batchSize: 1600,   // Reduced from 2000 to prevent memory issues
+  maxConcurrency: 6  // Reduced from 10 to prevent timeout (6 x 1600 = 9600 pools per batch cycle)
 };
 
 function generateJobRunId() {
@@ -24,6 +24,7 @@ module.exports = async (req, res) => {
   
   console.log(`🏊 Starting Liquidity Pool Dispatcher: ${jobRunId}`);
   console.log(`📊 Config: ${POOL_CONFIG.totalPools} pools, ${POOL_CONFIG.batchSize} per batch, ${POOL_CONFIG.maxConcurrency} parallel batches`);
+  console.log(`🔧 OPTIMIZED: Reduced batch size and concurrency to prevent timeouts`);
 
   try {
     // Calculate all batches
