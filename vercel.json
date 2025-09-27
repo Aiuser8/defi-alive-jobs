@@ -20,6 +20,10 @@
       "path": "/api/quality_monitor?type=health",
       "schedule": "45 */6 * * *"
     }
-  ]
+  ],
+  "functions": {
+    "api/**/*.js": {
+      "maxDuration": 300
+    }
+  }
 }
-// Force deployment refresh Fri Sep 26 21:51:58 EDT 2025
