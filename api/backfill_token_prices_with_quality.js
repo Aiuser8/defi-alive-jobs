@@ -8,13 +8,9 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
-const {
-  generateJobRunId,
-  validateTokenPriceNew, // Use the new ultra-permissive validation 
-  getPreviousPrice,
-  insertIntoScrubTable,
-  updateQualitySummary
-} = require('./data_validation');
+function generateJobRunId() {
+  return `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
 
 const EVM_CHAINS = new Set([
   'ethereum','unichain','base','arbitrum','optimism','polygon','bsc','avalanche',
@@ -109,13 +105,10 @@ module.exports = async (req, res) => {
   const jobRunId = generateJobRunId();
   const startTime = Date.now();
   
-  // Quality metrics tracking
+  // Simple metrics tracking
   let totalRecords = 0;
-  let cleanRecords = 0;
-  let scrubbedRecords = 0;
-  let errorRecords = 0;
-  let outlierRecords = 0;
-  const errorSummary = {};
+  let insertedRecords = 0;
+  let skippedRecords = 0;
 
   try {
     const { DEFILLAMA_API_KEY } = process.env;
@@ -159,34 +152,13 @@ module.exports = async (req, res) => {
     const client = await pool.connect();
     
     try {
-      // Ensure scrub tables exist
-      await client.query(`
-        CREATE SCHEMA IF NOT EXISTS scrub;
-        CREATE TABLE IF NOT EXISTS scrub.token_price_scrub (
-          id SERIAL PRIMARY KEY,
-          coin_id TEXT NOT NULL,
-          symbol TEXT,
-          price_usd NUMERIC,
-          confidence DECIMAL(3,2),
-          decimals INTEGER,
-          price_timestamp TIMESTAMPTZ,
-          validation_errors TEXT[],
-          quality_score INTEGER,
-          is_outlier BOOLEAN DEFAULT FALSE,
-          outlier_reason TEXT,
-          original_data JSONB,
-          processed_at TIMESTAMPTZ DEFAULT NOW(),
-          job_run_id TEXT,
-          retry_count INTEGER DEFAULT 0
-        );
-      `);
+      // No scrub tables needed - direct insertion only
 
       for (const group of chunk(coinIds, BATCH_SIZE)) {
         try {
           const data = await fetchCurrentPricesForBatch(group, DEFILLAMA_API_KEY);
           const nodes = data?.coins || {};
-          const cleanBatch = [];
-          const scrubBatch = [];
+          const validRecords = [];
 
           for (let i = 0; i < group.length; i++) {
             const id = group[i];
@@ -196,38 +168,11 @@ module.exports = async (req, res) => {
             // Chart endpoint returns prices array, get the latest price
             const latestPrice = node?.prices?.[node.prices.length - 1];
             
-        if (!node || !latestPrice || typeof latestPrice.price !== 'number') {
-          // No data from API - insert into scrub table
-          errorRecords++;
-          errorSummary['no_api_data'] = (errorSummary['no_api_data'] || 0) + 1;
-          
-          // Create scrub data for tokens with no API data
-          const noDataScrub = {
-            coinId: id,
-            symbol: null,
-            confidence: null,
-            decimals: null,
-            tsSec: Math.floor(Date.now() / 1000),
-            price: null,
-            timestamp: Math.floor(Date.now() / 1000)
-          };
-          
-          const noDataValidation = {
-            isValid: false,
-            errors: ['no_api_data'],
-            qualityScore: 0,
-            isOutlier: false,
-            outlierReason: 'No price data available from API'
-          };
-          
-          try {
-            await insertIntoScrubTable(client, 'token_price_scrub', noDataScrub, noDataValidation, jobRunId, noDataScrub);
-            scrubbedRecords++;
-          } catch (scrubError) {
-            console.error(`Failed to insert no-data token into scrub:`, scrubError.message);
-          }
-          continue;
-        }
+            // Skip if no valid price data
+            if (!node || !latestPrice || typeof latestPrice.price !== 'number' || latestPrice.price <= 0) {
+              skippedRecords++;
+              continue;
+            }
 
             // Add microsecond offset to prevent timestamp collisions from parallel batches
             const baseTsSec = Number.isFinite(latestPrice.timestamp) ? latestPrice.timestamp : Math.floor(Date.now() / 1000);
@@ -243,83 +188,31 @@ module.exports = async (req, res) => {
               timestamp: tsSec
             };
 
-            // BYPASS ALL EXTERNAL VALIDATION - inline ultra-permissive validation
-            const validation = {
-              isValid: true, // Accept everything with valid price
-              errors: [],
-              qualityScore: 100,
-              isOutlier: false,
-              outlierReason: null
-            };
-            
-            // Only reject if price is clearly invalid
-            if (!priceData.price || typeof priceData.price !== 'number' || priceData.price <= 0) {
-              validation.isValid = false;
-              validation.errors = ['invalid_price'];
-              validation.qualityScore = 0;
-            }
-            
-            if (validation.isValid) {
-              // Clean data - goes to main table
-              cleanBatch.push(priceData);
-              cleanRecords++;
-            } else {
-              // Invalid data - goes to scrub table
-              await insertIntoScrubTable(
-                client, 
-                'token_price_scrub', 
-                priceData, 
-                validation, 
-                jobRunId, 
-                node
-              );
-              
-              scrubbedRecords++;
-              
-              // Track error types
-              validation.errors.forEach(error => {
-                errorSummary[error] = (errorSummary[error] || 0) + 1;
-              });
-              
-              if (validation.isOutlier) {
-                outlierRecords++;
-              }
-            }
+            validRecords.push(priceData);
           }
 
-          // Insert clean data into main table
-          if (cleanBatch.length) {
-            await upsertCleanBatch(client, cleanBatch);
+          // Insert all valid records directly into main table
+          if (validRecords.length) {
+            await upsertCleanBatch(client, validRecords);
+            insertedRecords += validRecords.length;
           }
 
         } catch (e) {
           // Whole group failed
-          errorRecords += group.length;
-          errorSummary['api_fetch_error'] = (errorSummary['api_fetch_error'] || 0) + group.length;
+          skippedRecords += group.length;
           console.error(`Batch failed for group:`, group, e.message);
         }
         
         await sleep(SLEEP_MS);
       }
 
-      // Update quality summary
-      await updateQualitySummary(client, 'backfill_token_prices', jobRunId, {
-        totalRecords,
-        cleanRecords,
-        scrubbedRecords,
-        errorRecords,
-        outlierRecords,
-        processingTimeMs: Date.now() - startTime,
-        errorSummary
-      });
-
     } finally {
       client.release();
       await pool.end();
     }
 
-    // Consider job successful if we processed some tokens (even if some went to scrub)
-    const jobSuccess = totalRecords > 0 && (cleanRecords > 0 || scrubbedRecords > 0);
+    // Consider job successful if we inserted some records
+    const jobSuccess = insertedRecords > 0;
     
     return res.status(200).json({
       success: jobSuccess,
@@ -327,51 +220,32 @@ module.exports = async (req, res) => {
       date: new Date().toISOString(),
       offset, limit,
       
-      // Quality metrics
+      // Simple metrics
       total_records: totalRecords,
-      clean_records: cleanRecords,
-      scrubbed_records: scrubbedRecords,
-      error_records: errorRecords,
-      outlier_records: outlierRecords,
-      overall_quality_score: totalRecords > 0 ? (cleanRecords / totalRecords) * 100 : 0,
+      inserted_records: insertedRecords,
+      skipped_records: skippedRecords,
+      success_rate: totalRecords > 0 ? (insertedRecords / totalRecords) * 100 : 0,
       
       // Processing time
       processing_time_ms: Date.now() - startTime,
       
-      // Error summary
-      error_summary: errorSummary,
-      
       // Success message
       message: jobSuccess ? 
-        `Successfully processed ${totalRecords} tokens (${cleanRecords} clean, ${scrubbedRecords} scrubbed)` :
-        `Failed to process any tokens successfully`
+        `Successfully inserted ${insertedRecords}/${totalRecords} token prices (${skippedRecords} skipped)` :
+        `Failed to insert any token prices`
     });
     
   } catch (e) {
-    // Update quality summary with error
-    try {
-      const pool = makePoolFromEnv();
-      const client = await pool.connect();
-      await updateQualitySummary(client, 'backfill_token_prices', jobRunId, {
-        totalRecords,
-        cleanRecords,
-        scrubbedRecords,
-        errorRecords: errorRecords + 1,
-        outlierRecords,
-        processingTimeMs: Date.now() - startTime,
-        errorSummary: { ...errorSummary, fatal_error: e.message }
-      });
-      client.release();
-      await pool.end();
-    } catch (summaryError) {
-      console.error('Failed to update quality summary:', summaryError.message);
-    }
+    console.error('Token price job failed:', e.message);
     
     return res.status(500).json({ 
       success: false,
       job_run_id: jobRunId,
-      error: e.message, 
-      stack: e.stack 
+      error: e.message,
+      total_records: totalRecords,
+      inserted_records: insertedRecords,
+      skipped_records: skippedRecords,
+      processing_time_ms: Date.now() - startTime
     });
   }
 };
