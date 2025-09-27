@@ -175,8 +175,9 @@ module.exports = async (req, res) => {
             }
 
             // Add microsecond offset to prevent timestamp collisions from parallel batches
-            const baseTsSec = Number.isFinite(latestPrice.timestamp) ? latestPrice.timestamp : Math.floor(Date.now() / 1000);
-            const tsSec = baseTsSec + (i * 0.001); // Add millisecond offset per token in batch
+            // Use current time with microsecond offset to guarantee unique timestamps
+            const nowMs = Date.now();
+            const tsSec = (nowMs / 1000) + (i * 0.001); // Current time + millisecond offset per token
             
             const priceData = {
               coinId: id,
