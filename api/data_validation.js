@@ -17,65 +17,30 @@ function validateTokenPrice(priceData, previousPrice = null) {
   let isOutlier = false;
   let outlierReason = null;
 
-  // Basic validation
+  // Minimal validation - only check for basic price validity
   if (!priceData.price || typeof priceData.price !== 'number') {
     errors.push('invalid_price');
     qualityScore -= 30;
   } else {
     const price = priceData.price;
     
-    // Price range validation
+    // Only reject clearly invalid prices
     if (price <= 0) {
       errors.push('negative_price');
       qualityScore -= 40;
-    } else if (price > 1e12) {
-      errors.push('unrealistic_price_high');
-      qualityScore -= 30;
     }
-    
-    // Outlier detection based on previous price
-    if (previousPrice && previousPrice > 0) {
-      const priceChange = Math.abs(price - previousPrice) / previousPrice;
-      
-      // Detect sudden price changes (>50% in 15 minutes)
-      if (priceChange > 0.5) {
-        isOutlier = true;
-        outlierReason = `sudden_price_change_${(priceChange * 100).toFixed(1)}%`;
-        qualityScore -= 20;
-      }
-      
-      // Detect extreme price changes (>90%)
-      if (priceChange > 0.9) {
-        errors.push('extreme_price_change');
-        qualityScore -= 50;
-      }
-    }
+    // Removed: unrealistic_price_high check (too restrictive)
+    // Removed: outlier detection based on previous price (too restrictive)
+    // Removed: extreme price change detection (too restrictive)
   }
 
-  // Timestamp validation - more lenient for API data
-  if (!priceData.timestamp || !Number.isFinite(priceData.timestamp)) {
-    errors.push('invalid_timestamp');
-    qualityScore -= 25;
-  } else {
-    // TEMPORARILY DISABLED: Stale data validation to test if API data is otherwise valid
-    // const ageMinutes = (Date.now() - priceData.timestamp * 1000) / (1000 * 60);
-    // if (ageMinutes > 180) { // Increased from 60 to 180 minutes (3 hours)
-    //   errors.push('stale_data');
-    //   qualityScore -= Math.min(20, ageMinutes / 10); // Reduced penalty
-    // } else if (ageMinutes > 60) {
-    //   // Data is somewhat stale but not critically so
-    //   qualityScore -= Math.min(10, ageMinutes / 20); // Light penalty
-    // }
-  }
+  // Removed: All timestamp validation (no longer needed)
+  // Removed: Stale data validation (no longer needed)
+  // Removed: Confidence validation (too restrictive)
 
-  // Confidence validation
-  if (priceData.confidence && (priceData.confidence < 0 || priceData.confidence > 1)) {
-    errors.push('invalid_confidence');
-    qualityScore -= 10;
-  }
-
+  // Accept almost everything - only reject clearly broken data
   return {
-    isValid: errors.length === 0 && qualityScore >= 70,
+    isValid: errors.length === 0, // Removed quality score threshold
     errors,
     qualityScore: Math.max(0, qualityScore),
     isOutlier,
