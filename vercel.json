@@ -1,19 +1,19 @@
 {
   "crons": [
     {
-      "path": "/api/dispatcher_token_prices",
+      "path": "/api/dispatcher_token_prices_direct",
       "schedule": "*/5 * * * *"
     },
     {
-      "path": "/api/dispatcher_lending_markets", 
+      "path": "/api/dispatcher_lending_direct", 
       "schedule": "15,45 * * * *"
     },
     {
-      "path": "/api/dispatcher_liquidity_pools",
+      "path": "/api/dispatcher_liquidity_pools_direct",
       "schedule": "5 * * * *"
     },
     {
-      "path": "/api/dispatcher_daily_jobs",
+      "path": "/api/dispatcher_daily_jobs_direct",
       "schedule": "25 10 * * *"
     },
     {
