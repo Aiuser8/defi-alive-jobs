@@ -19,6 +19,10 @@
     {
       "path": "/api/quality_monitor?type=health",
       "schedule": "45 */6 * * *"
+    },
+    {
+      "path": "/api/job_perp_funding_rates",
+      "schedule": "0 * * * *"
     }
   ],
   "functions": {
