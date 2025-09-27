@@ -6,8 +6,8 @@ module.exports.config = { runtime: 'nodejs18.x' };
 
 const { Pool } = require('pg');
 
-// Import the actual job function
-const tokenPriceJob = require('./backfill_token_prices_with_quality.js');
+// Import the actual job function - SIMPLIFIED VERSION
+const tokenPriceJob = require('./backfill_token_prices_simplified.js');
 
 // Token price configuration - OPTIMIZED: Active tokens only
 const TOKEN_PRICE_CONFIG = {
