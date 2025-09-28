@@ -19,17 +19,20 @@ function makePoolFromEnv() {
 async function fetchLendingData() {
   const { DEFILLAMA_API_KEY } = process.env;
   
+  console.log(`🔑 API Key loaded: ${DEFILLAMA_API_KEY ? 'YES' : 'NO'} (length: ${DEFILLAMA_API_KEY?.length || 0})`);
+  
   if (!DEFILLAMA_API_KEY) {
     throw new Error('DEFILLAMA_API_KEY environment variable is required');
   }
 
   const url = `https://pro-api.llama.fi/${DEFILLAMA_API_KEY}/yields/poolsBorrow`;
   
-  console.log(`📡 Fetching lending data from: ${url}`);
+  console.log(`📡 Fetching lending data from DeFiLlama Pro API`);
   
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    const errorText = await response.text().catch(() => '');
+    throw new Error(`API request failed: ${response.status} ${response.statusText} - ${errorText}`);
   }
   
   const data = await response.json();
