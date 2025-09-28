@@ -1,149 +1,127 @@
 // api/dispatcher_token_prices_direct.js
-// Direct token price dispatcher - no validation, fast parallel data collection
+// Direct Parallel Token Price Collection Dispatcher
+// EXACT COPY of working dispatcher but calls direct job (no scrubbing)
 
 module.exports.config = { runtime: 'nodejs18.x' };
 
-// Import the direct token price job
+const { Pool } = require('pg');
+
+// Import the actual job function - DIRECT VERSION
 const tokenPriceJob = require('./backfill_token_prices_direct.js');
 
-module.exports = async function(req, res) {
+// Token price configuration - MATCH WORKING DISPATCHER
+const TOKEN_PRICE_CONFIG = {
+  totalTokens: 2454,   // Filtered to only tokens with fresh price data (67.1% coverage)
+  batchSize: 818,      // Adjusted to evenly divide active tokens across 3 batches
+  maxConcurrency: 3    // Keep 3 parallel batches for optimal performance
+};
+
+function generateJobRunId() {
+  return `dispatcher_token_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+module.exports = async (req, res) => {
   const startTime = Date.now();
+  const jobRunId = generateJobRunId();
   
+  console.log(`🚀 Starting Direct Token Price Dispatcher: ${jobRunId}`);
+  console.log(`📊 Config: ${TOKEN_PRICE_CONFIG.totalTokens} tokens, ${TOKEN_PRICE_CONFIG.batchSize} per batch, ${TOKEN_PRICE_CONFIG.maxConcurrency} parallel batches`);
+  console.log(`🎯 DIRECT: Processing ${TOKEN_PRICE_CONFIG.totalTokens} active tokens (no scrubbing)`);
+
   try {
-    console.log('🚀 Starting Direct Token Price Dispatcher...');
-    
-    // Load token list to determine batch configuration
-    const fs = require('fs');
-    const path = require('path');
-    const tokenListPath = path.join(process.cwd(), 'token_list_active.json');
-    const tokenList = JSON.parse(fs.readFileSync(tokenListPath, 'utf8'));
-    
-    // Convert token list to coin IDs for accurate count
-    const coinIds = [];
-    for (const item of tokenList) {
-      const chain = String(item.chain || '').trim().toLowerCase();
-      const address = String(item.address || '').trim();
-      if (!chain || !address) continue;
-      
-      const addrForSlug = ['ethereum', 'polygon', 'arbitrum', 'optimism', 'base', 'avalanche', 'bsc'].includes(chain) 
-        ? address.toLowerCase() 
-        : address;
-      
-      coinIds.push(`${chain}:${addrForSlug}`);
-    }
-    
-    const totalTokens = coinIds.length;
-    const tokensPerBatch = 25;  // Match working job to avoid 414 URI Too Large
-    const maxParallelBatches = 3;
-    
-    console.log(`📊 Config: ${totalTokens} tokens, ${tokensPerBatch} per batch, ${maxParallelBatches} parallel batches`);
-    console.log(`🎯 Processing ${totalTokens} active tokens (filtered for fresh price data)`);
-    
-    // Calculate batches
-    const totalBatches = Math.ceil(totalTokens / tokensPerBatch);
+    // Calculate all batches
     const batches = [];
-    
-    for (let i = 0; i < totalBatches; i++) {
-      const offset = i * tokensPerBatch;
-      const limit = Math.min(tokensPerBatch, totalTokens - offset);
-      
-      batches.push({ offset, limit, batchNumber: i + 1 });
-    }
-    
-    console.log(`📦 Created ${batches.length} batches to process in parallel`);
-    
-    // Process batches in parallel with rate limiting
-    const results = [];
-    let successfulBatches = 0;
-    let failedBatches = 0;
-    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-    
-    for (let i = 0; i < batches.length; i += maxParallelBatches) {
-      const batchGroup = batches.slice(i, i + maxParallelBatches);
-      
-      // Add delay between batch groups to avoid rate limiting
-      if (i > 0) {
-        await sleep(120); // 120ms delay like working job
-      }
-      
-      const batchPromises = batchGroup.map(async (batch) => {
-        try {
-          console.log(`🔄 Starting batch ${batch.batchNumber}/${batches.length}: offset=${batch.offset}, limit=${batch.limit}`);
-          
-          // Create mock request/response for the job
-          const jobReq = {
-            query: {
-              offset: batch.offset.toString(),
-              limit: batch.limit.toString()
-            }
-          };
-          
-          let jobResult = null;
-          const jobRes = {
-            status: (code) => ({
-              json: (data) => {
-                jobResult = { statusCode: code, data };
-              }
-            })
-          };
-          
-          // Execute the token price job
-          await tokenPriceJob(jobReq, jobRes);
-          
-          if (jobResult && jobResult.statusCode === 200) {
-            console.log(`✅ Batch ${batch.batchNumber} completed: SUCCESS`);
-            successfulBatches++;
-            return { success: true, batch: batch.batchNumber, result: jobResult.data };
-          } else {
-            throw new Error(`Job failed with status: ${jobResult?.statusCode || 'unknown'}`);
-          }
-          
-        } catch (error) {
-          console.error(`❌ Batch ${batch.batchNumber} failed:`, error.message);
-          failedBatches++;
-          return { success: false, batch: batch.batchNumber, error: error.message };
-        }
+    for (let offset = 0; offset < TOKEN_PRICE_CONFIG.totalTokens; offset += TOKEN_PRICE_CONFIG.batchSize) {
+      batches.push({
+        offset,
+        limit: Math.min(TOKEN_PRICE_CONFIG.batchSize, TOKEN_PRICE_CONFIG.totalTokens - offset)
       });
-      
-      const batchResults = await Promise.all(batchPromises);
-      results.push(...batchResults);
     }
-    
-    const duration = Date.now() - startTime;
-    
-    // Calculate totals
-    const totalInserted = results
-      .filter(r => r.success)
-      .reduce((sum, r) => sum + (r.result?.insertedRecords || 0), 0);
-    
-    const totalSkipped = results
-      .filter(r => r.success)
-      .reduce((sum, r) => sum + (r.result?.skippedRecords || 0), 0);
-    
-    console.log('🎉 Direct Token Price Dispatcher Complete!');
-    console.log(`✅ Successful batches: ${successfulBatches}/${batches.length}`);
-    console.log(`❌ Failed batches: ${failedBatches}/${batches.length}`);
-    console.log(`📊 Total records inserted: ${totalInserted}`);
-    console.log(`⚠️ Total records skipped: ${totalSkipped}`);
-    console.log(`⏱️  Total time: ${(duration / 1000).toFixed(1)}s`);
-    
-    res.status(200).json({
-      success: true,
-      message: 'Direct token price collection completed',
-      totalBatches: batches.length,
-      successfulBatches,
-      failedBatches,
-      totalInserted,
-      totalSkipped,
-      processingTimeMs: duration,
-      batchResults: results
+
+    console.log(`📦 Created ${batches.length} batches to process in parallel`);
+
+    // Execute all batches in parallel
+    const batchPromises = batches.map(async (batch, index) => {
+      console.log(`🔄 Starting batch ${index + 1}/${batches.length}: offset=${batch.offset}, limit=${batch.limit}`);
+      
+            // Create mock request/response for the job
+            const mockReq = {
+              query: {
+                offset: batch.offset.toString(),
+                limit: batch.limit.toString()
+              },
+              headers: {
+                host: 'localhost'
+              },
+              url: `/?offset=${batch.offset}&limit=${batch.limit}`
+            };
+      
+      let jobResult = null;
+      
+      const mockRes = {
+        status: (code) => ({
+          json: (data) => {
+            console.log(`✅ Batch ${index + 1} completed: ${data.success ? 'SUCCESS' : 'FAILED'}`);
+            if (data.inserted_records) {
+              console.log(`   📊 ${data.total_records} records, ${data.inserted_records} inserted, ${data.skipped_records} skipped`);
+            }
+            jobResult = { code, data }; // Capture the actual result
+            return { code, data };
+          }
+        })
+      };
+
+      try {
+        await tokenPriceJob(mockReq, mockRes);
+        // Check the actual job success, not just if it completed without throwing
+        const actualSuccess = jobResult?.data?.success || false;
+        return { 
+          batch: index + 1, 
+          success: actualSuccess,
+          error: actualSuccess ? null : (jobResult?.data?.error || 'Job completed but reported failure')
+        };
+      } catch (error) {
+        console.error(`❌ Batch ${index + 1} failed:`, error.message);
+        return { batch: index + 1, success: false, error: error.message };
+      }
     });
+
+    // Wait for all batches to complete
+    const results = await Promise.all(batchPromises);
     
+    // Calculate summary
+    const successful = results.filter(r => r.success).length;
+    const failed = results.filter(r => !r.success).length;
+    const processingTime = Date.now() - startTime;
+
+    console.log(`🎉 Direct Token Price Dispatcher Complete!`);
+    console.log(`   ✅ Successful batches: ${successful}/${batches.length}`);
+    console.log(`   ❌ Failed batches: ${failed}/${batches.length}`);
+    console.log(`   ⏱️  Total time: ${(processingTime / 1000).toFixed(1)}s`);
+
+    // Return success if most batches succeeded
+    const success = successful >= Math.ceil(batches.length * 0.7); // 70% success threshold
+
+    res.status(200).json({
+      success,
+      jobRunId,
+      dispatcher: 'token_prices_direct',
+      summary: {
+        totalBatches: batches.length,
+        successfulBatches: successful,
+        failedBatches: failed,
+        processingTimeMs: processingTime,
+        successRate: (successful / batches.length * 100).toFixed(1) + '%'
+      },
+      results
+    });
+
   } catch (error) {
     console.error('❌ Direct Token Price Dispatcher failed:', error);
-    
     res.status(500).json({
       success: false,
+      jobRunId,
+      dispatcher: 'token_prices_direct',
       error: error.message,
       processingTimeMs: Date.now() - startTime
     });
