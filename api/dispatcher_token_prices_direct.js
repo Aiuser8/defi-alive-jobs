@@ -33,7 +33,7 @@ module.exports = async function(req, res) {
     }
     
     const totalTokens = coinIds.length;
-    const tokensPerBatch = 818;
+    const tokensPerBatch = 25;  // Match working job to avoid 414 URI Too Large
     const maxParallelBatches = 3;
     
     console.log(`📊 Config: ${totalTokens} tokens, ${tokensPerBatch} per batch, ${maxParallelBatches} parallel batches`);
@@ -52,13 +52,19 @@ module.exports = async function(req, res) {
     
     console.log(`📦 Created ${batches.length} batches to process in parallel`);
     
-    // Process batches in parallel
+    // Process batches in parallel with rate limiting
     const results = [];
     let successfulBatches = 0;
     let failedBatches = 0;
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     
     for (let i = 0; i < batches.length; i += maxParallelBatches) {
       const batchGroup = batches.slice(i, i + maxParallelBatches);
+      
+      // Add delay between batch groups to avoid rate limiting
+      if (i > 0) {
+        await sleep(120); // 120ms delay like working job
+      }
       
       const batchPromises = batchGroup.map(async (batch) => {
         try {
