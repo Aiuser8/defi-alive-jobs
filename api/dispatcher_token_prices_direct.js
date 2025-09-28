@@ -18,7 +18,21 @@ module.exports = async function(req, res) {
     const tokenListPath = path.join(process.cwd(), 'token_list_active.json');
     const tokenList = JSON.parse(fs.readFileSync(tokenListPath, 'utf8'));
     
-    const totalTokens = tokenList.length;
+    // Convert token list to coin IDs for accurate count
+    const coinIds = [];
+    for (const item of tokenList) {
+      const chain = String(item.chain || '').trim().toLowerCase();
+      const address = String(item.address || '').trim();
+      if (!chain || !address) continue;
+      
+      const addrForSlug = ['ethereum', 'polygon', 'arbitrum', 'optimism', 'base', 'avalanche', 'bsc'].includes(chain) 
+        ? address.toLowerCase() 
+        : address;
+      
+      coinIds.push(`${chain}:${addrForSlug}`);
+    }
+    
+    const totalTokens = coinIds.length;
     const tokensPerBatch = 818;
     const maxParallelBatches = 3;
     

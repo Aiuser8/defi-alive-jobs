@@ -25,46 +25,49 @@ async function fetchTokenPrices(coinIds) {
     throw new Error('DEFILLAMA_API_KEY environment variable is required');
   }
 
-  const coinsParam = encodeURIComponent(coinIds.join(','));
-  const url = `https://pro-api.llama.fi/${DEFILLAMA_API_KEY}/coins/chart/${coinsParam}`;
+  const coinsParam = coinIds.join(',');
+  const url = `https://pro-api.llama.fi/${DEFILLAMA_API_KEY}/coins/prices/current/${coinsParam}`;
   
-  console.log(`📡 Fetching prices for ${coinIds.length} tokens...`);
+  console.log(`📡 Fetching prices for ${coinIds.length} tokens from: ${url}`);
   
-  const response = await fetch(url);
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; DeFi-Jobs/1.0)',
+      'Accept': 'application/json',
+      'Connection': 'keep-alive'
+    }
+  });
+  
   if (!response.ok) {
     const errorText = await response.text().catch(() => '');
     throw new Error(`API request failed: ${response.status} ${response.statusText} - ${errorText}`);
   }
   
   const data = await response.json();
-  if (!data || typeof data !== 'object') {
-    throw new Error('Invalid API response format');
+  if (!data.coins || typeof data.coins !== 'object') {
+    throw new Error('Invalid API response format - expected coins object');
   }
   
-  console.log(`✅ Received price data for ${Object.keys(data).length} tokens`);
-  return data;
+  console.log(`✅ Received price data for ${Object.keys(data.coins).length} tokens`);
+  return data.coins;
 }
 
 /**
  * Insert token prices directly into update table
  */
-async function insertTokenPrices(client, chartData, coinIds) {
+async function insertTokenPrices(client, priceData, coinIds) {
   let insertedCount = 0;
   let skippedCount = 0;
   
   console.log(`📝 Processing ${coinIds.length} token prices...`);
   
-  const nodes = chartData?.coins || chartData || {};
-  
   for (let i = 0; i < coinIds.length; i++) {
     const coinId = coinIds[i];
-    const node = nodes[coinId];
-    
-    // Chart endpoint returns prices array, get the latest price
-    const latestPrice = node?.prices?.[node.prices.length - 1];
+    const priceInfo = priceData[coinId];
     
     // Skip if no valid price data
-    if (!node || !latestPrice || typeof latestPrice.price !== 'number' || latestPrice.price <= 0) {
+    if (!priceInfo || typeof priceInfo.price !== 'number' || priceInfo.price <= 0) {
       skippedCount++;
       continue;
     }
@@ -89,11 +92,11 @@ async function insertTokenPrices(client, chartData, coinIds) {
       
       const values = [
         coinId,                           // coin_id
-        node.symbol || null,              // symbol
-        node.confidence || 0.99,          // confidence
-        node.decimals || 18,              // decimals
+        priceInfo.symbol || null,         // symbol
+        priceInfo.confidence || 0.99,     // confidence
+        priceInfo.decimals || 18,         // decimals
         tsIso,                           // price_timestamp
-        latestPrice.price                 // price_usd
+        priceInfo.price                   // price_usd
       ];
       
       await client.query(insertQuery, values);
@@ -128,8 +131,22 @@ module.exports = async function(req, res) {
     const tokenListPath = path.join(process.cwd(), 'token_list_active.json');
     const tokenList = JSON.parse(fs.readFileSync(tokenListPath, 'utf8'));
     
-    // Get batch of coin IDs
-    const coinIds = tokenList.slice(offset, offset + limit);
+    // Convert token list entries to coin IDs
+    const tokenSlice = tokenList.slice(offset, offset + limit);
+    const coinIds = [];
+    
+    for (const item of tokenSlice) {
+      const chain = String(item.chain || '').trim().toLowerCase();
+      const address = String(item.address || '').trim();
+      if (!chain || !address) continue;
+      
+      // Convert to lowercase for EVM chains
+      const addrForSlug = ['ethereum', 'polygon', 'arbitrum', 'optimism', 'base', 'avalanche', 'bsc'].includes(chain) 
+        ? address.toLowerCase() 
+        : address;
+      
+      coinIds.push(`${chain}:${addrForSlug}`);
+    }
     
     if (coinIds.length === 0) {
       return res.status(200).json({
@@ -147,10 +164,10 @@ module.exports = async function(req, res) {
     client = await pool.connect();
     
     // Fetch token prices
-    const chartData = await fetchTokenPrices(coinIds);
+    const priceData = await fetchTokenPrices(coinIds);
     
     // Insert prices directly
-    const { insertedCount, skippedCount } = await insertTokenPrices(client, chartData, coinIds);
+    const { insertedCount, skippedCount } = await insertTokenPrices(client, priceData, coinIds);
     
     const duration = Date.now() - startTime;
     
