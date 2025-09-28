@@ -25,39 +25,46 @@ async function fetchTokenPrices(coinIds) {
     throw new Error('DEFILLAMA_API_KEY environment variable is required');
   }
 
-  const coinIdsStr = coinIds.join(',');
-  const url = `https://pro-api.llama.fi/${DEFILLAMA_API_KEY}/coins/prices/current/${coinIdsStr}`;
+  const coinsParam = encodeURIComponent(coinIds.join(','));
+  const url = `https://pro-api.llama.fi/${DEFILLAMA_API_KEY}/coins/chart/${coinsParam}`;
   
   console.log(`📡 Fetching prices for ${coinIds.length} tokens...`);
   
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    const errorText = await response.text().catch(() => '');
+    throw new Error(`API request failed: ${response.status} ${response.statusText} - ${errorText}`);
   }
   
   const data = await response.json();
-  if (!data.coins || typeof data.coins !== 'object') {
+  if (!data || typeof data !== 'object') {
     throw new Error('Invalid API response format');
   }
   
-  console.log(`✅ Received price data for ${Object.keys(data.coins).length} tokens`);
-  return data.coins;
+  console.log(`✅ Received price data for ${Object.keys(data).length} tokens`);
+  return data;
 }
 
 /**
  * Insert token prices directly into update table
  */
-async function insertTokenPrices(client, priceData, coinIds) {
+async function insertTokenPrices(client, chartData, coinIds) {
   let insertedCount = 0;
   let skippedCount = 0;
   
   console.log(`📝 Processing ${coinIds.length} token prices...`);
   
+  const nodes = chartData?.coins || chartData || {};
+  
   for (let i = 0; i < coinIds.length; i++) {
     const coinId = coinIds[i];
-    const priceInfo = priceData[coinId];
+    const node = nodes[coinId];
     
-    if (!priceInfo || typeof priceInfo.price !== 'number') {
+    // Chart endpoint returns prices array, get the latest price
+    const latestPrice = node?.prices?.[node.prices.length - 1];
+    
+    // Skip if no valid price data
+    if (!node || !latestPrice || typeof latestPrice.price !== 'number' || latestPrice.price <= 0) {
       skippedCount++;
       continue;
     }
@@ -82,11 +89,11 @@ async function insertTokenPrices(client, priceData, coinIds) {
       
       const values = [
         coinId,                           // coin_id
-        priceInfo.symbol || null,         // symbol
-        priceInfo.confidence || 0.99,     // confidence
-        priceInfo.decimals || 18,         // decimals
+        node.symbol || null,              // symbol
+        node.confidence || 0.99,          // confidence
+        node.decimals || 18,              // decimals
         tsIso,                           // price_timestamp
-        priceInfo.price                   // price_usd
+        latestPrice.price                 // price_usd
       ];
       
       await client.query(insertQuery, values);
@@ -140,10 +147,10 @@ module.exports = async function(req, res) {
     client = await pool.connect();
     
     // Fetch token prices
-    const priceData = await fetchTokenPrices(coinIds);
+    const chartData = await fetchTokenPrices(coinIds);
     
     // Insert prices directly
-    const { insertedCount, skippedCount } = await insertTokenPrices(client, priceData, coinIds);
+    const { insertedCount, skippedCount } = await insertTokenPrices(client, chartData, coinIds);
     
     const duration = Date.now() - startTime;
     
