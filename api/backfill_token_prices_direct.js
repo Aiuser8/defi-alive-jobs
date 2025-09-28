@@ -117,7 +117,9 @@ module.exports = async function(req, res) {
     
     // Load token list
     const fs = require('fs');
-    const tokenList = JSON.parse(fs.readFileSync('./token_list_active.json', 'utf8'));
+    const path = require('path');
+    const tokenListPath = path.join(process.cwd(), 'token_list_active.json');
+    const tokenList = JSON.parse(fs.readFileSync(tokenListPath, 'utf8'));
     
     // Get batch of coin IDs
     const coinIds = tokenList.slice(offset, offset + limit);

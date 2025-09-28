@@ -14,7 +14,9 @@ module.exports = async function(req, res) {
     
     // Load token list to determine batch configuration
     const fs = require('fs');
-    const tokenList = JSON.parse(fs.readFileSync('./token_list_active.json', 'utf8'));
+    const path = require('path');
+    const tokenListPath = path.join(process.cwd(), 'token_list_active.json');
+    const tokenList = JSON.parse(fs.readFileSync(tokenListPath, 'utf8'));
     
     const totalTokens = tokenList.length;
     const tokensPerBatch = 818;
