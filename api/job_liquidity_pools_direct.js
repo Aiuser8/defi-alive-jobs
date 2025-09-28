@@ -7,7 +7,7 @@ module.exports.config = { runtime: 'nodejs18.x' };
 require('dotenv').config();
 const { Pool } = require('pg');
 
-const API_KEY = 'f162bf7f5a9432db5b75f30ebabc2d8d6b94cc51297549662caf571f4ad307ca';
+// API_KEY will be loaded from environment variable
 
 function makePoolFromEnv() {
   const {
@@ -35,7 +35,13 @@ function makePoolFromEnv() {
  * Fetch liquidity pool data from DeFiLlama Pro API
  */
 async function fetchPoolData(offset, limit) {
-  const url = `https://pro-api.llama.fi/${API_KEY}/yields?offset=${offset}&limit=${limit}`;
+  const { DEFILLAMA_API_KEY } = process.env;
+  
+  if (!DEFILLAMA_API_KEY) {
+    throw new Error('DEFILLAMA_API_KEY environment variable is required');
+  }
+
+  const url = `https://pro-api.llama.fi/${DEFILLAMA_API_KEY}/yields?offset=${offset}&limit=${limit}`;
   
   console.log(`📡 Fetching pools ${offset}-${offset + limit - 1} from: ${url}`);
   

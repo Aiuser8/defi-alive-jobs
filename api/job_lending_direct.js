@@ -17,8 +17,13 @@ function makePoolFromEnv() {
  * Fetches lending market data from DeFiLlama Pro API
  */
 async function fetchLendingData() {
-  const API_KEY = 'f162bf7f5a9432db5b75f30ebabc2d8d6b94cc51297549662caf571f4ad307ca';
-  const url = `https://pro-api.llama.fi/${API_KEY}/yields/poolsBorrow`;
+  const { DEFILLAMA_API_KEY } = process.env;
+  
+  if (!DEFILLAMA_API_KEY) {
+    throw new Error('DEFILLAMA_API_KEY environment variable is required');
+  }
+
+  const url = `https://pro-api.llama.fi/${DEFILLAMA_API_KEY}/yields/poolsBorrow`;
   
   console.log(`📡 Fetching lending data from: ${url}`);
   
