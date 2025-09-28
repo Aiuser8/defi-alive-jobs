@@ -60,11 +60,12 @@ async function insertLendingData(client, lendingData) {
           pool_id, tvl_usd, apy, apy_pct_1d, apy_pct_7d, apy_pct_30d,
           stablecoin, il_risk, exposure, ltv, borrowable,
           mu, sigma, count, outlier, apy_mean_30d,
-          predictions, reward_tokens, underlying_tokens, pool_meta
+          predictions, reward_tokens, underlying_tokens, pool_meta,
+          data_timestamp
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
           $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28,
-          $29, $30
+          $29, $30, $31
         )
       `;
       
@@ -100,7 +101,8 @@ async function insertLendingData(client, lendingData) {
         pool.predictions ? JSON.stringify(pool.predictions) : null,  // predictions
         pool.rewardTokens ? JSON.stringify(pool.rewardTokens) : null, // reward_tokens
         pool.underlyingTokens ? JSON.stringify(pool.underlyingTokens) : null, // underlying_tokens
-        pool.poolMeta || null                          // pool_meta
+        pool.poolMeta || null,                         // pool_meta
+        new Date()                                     // data_timestamp
       ];
       
       await client.query(insertQuery, values);
