@@ -5,7 +5,7 @@
       "schedule": "*/5 * * * *"
     },
     {
-      "path": "/api/dispatcher_lending_direct", 
+      "path": "/api/dispatcher_lending_direct_v2", 
       "schedule": "15,45 * * * *"
     },
     {
