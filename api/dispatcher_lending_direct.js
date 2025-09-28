@@ -10,7 +10,8 @@ module.exports = async function(req, res) {
   const startTime = Date.now();
   
   try {
-    console.log('🚀 Starting Direct Lending Market Dispatcher...');
+    console.log('🚀 Starting Direct Lending Market Dispatcher (DIRECT VERSION - NO BATCHING)...');
+    console.log('📋 This is the DIRECT dispatcher - should NOT show batching logic');
     
     // Create mock request/response for the job
     const jobReq = {};
