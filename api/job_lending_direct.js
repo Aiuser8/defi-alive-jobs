@@ -68,7 +68,7 @@ async function insertLendingData(client, lendingData) {
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
           $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28,
-          $29, $30, $31
+          $29, $30, $31, $32, $33
         )
       `;
       
@@ -78,34 +78,34 @@ async function insertLendingData(client, lendingData) {
         pool.project || null,                           // project
         pool.chain || null,                             // chain
         pool.symbol || null,                            // symbol
-        pool.tvlUsd || null,                           // total_supply_usd
-        pool.totalBorrowUsd || null,                   // total_borrow_usd
-        pool.debtCeilingUsd || null,                   // debt_ceiling_usd
-        pool.apyBase || null,                          // apy_base_supply
-        pool.apyReward || null,                        // apy_reward_supply
-        pool.apyBaseBorrow || null,                    // apy_base_borrow
-        pool.apyRewardBorrow || null,                  // apy_reward_borrow
-        pool.pool || null,                             // pool_id
-        pool.tvlUsd || null,                           // tvl_usd
-        pool.apy || null,                              // apy
-        pool.apyPct1D || null,                         // apy_pct_1d
-        pool.apyPct7D || null,                         // apy_pct_7d
-        pool.apyPct30D || null,                        // apy_pct_30d
-        pool.stablecoin || false,                      // stablecoin
-        pool.ilRisk || null,                           // il_risk
-        pool.exposure || null,                         // exposure
-        pool.ltv || null,                              // ltv
-        pool.borrowable || false,                      // borrowable
-        pool.mu || null,                               // mu
-        pool.sigma || null,                            // sigma
-        pool.count || null,                            // count
-        pool.outlier || false,                         // outlier
-        pool.apyMean30d || null,                       // apy_mean_30d
+        pool.totalSupplyUsd || null,                    // total_supply_usd
+        pool.totalBorrowUsd || null,                    // total_borrow_usd
+        pool.debtCeilingUsd || null,                    // debt_ceiling_usd
+        pool.apyBaseSupply || null,                     // apy_base_supply
+        pool.apyRewardSupply || null,                   // apy_reward_supply
+        pool.apyBaseBorrow || null,                     // apy_base_borrow
+        pool.apyRewardBorrow || null,                   // apy_reward_borrow
+        pool.pool || null,                              // pool_id (duplicate of market_id, but API uses 'pool')
+        pool.tvlUsd || null,                            // tvl_usd
+        pool.apy || null,                               // apy
+        pool.apyPct1D || null,                          // apy_pct_1d
+        pool.apyPct7D || null,                          // apy_pct_7d
+        pool.apyPct30D || null,                         // apy_pct_30d
+        pool.stablecoin || false,                       // stablecoin
+        pool.ilRisk || null,                            // il_risk
+        pool.exposure || null,                          // exposure
+        pool.ltv || null,                               // ltv
+        pool.borrowable || false,                       // borrowable
+        pool.mu || null,                                // mu
+        pool.sigma || null,                             // sigma
+        pool.count || null,                             // count
+        pool.outlier || false,                          // outlier
+        pool.apyMean30d || null,                        // apy_mean_30d
         pool.predictions ? JSON.stringify(pool.predictions) : null,  // predictions
         pool.rewardTokens ? JSON.stringify(pool.rewardTokens) : null, // reward_tokens
         pool.underlyingTokens ? JSON.stringify(pool.underlyingTokens) : null, // underlying_tokens
-        pool.poolMeta || null,                         // pool_meta
-        new Date()                                     // data_timestamp
+        pool.poolMeta || null,                          // pool_meta
+        new Date()                                      // data_timestamp
       ];
       
       await client.query(insertQuery, values);
