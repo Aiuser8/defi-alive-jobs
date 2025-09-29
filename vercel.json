@@ -11,30 +11,6 @@
     {
       "path": "/api/dispatcher_liquidity_pools_direct",
       "schedule": "5 * * * *"
-    },
-    {
-      "path": "/api/dispatcher_daily_jobs_direct",
-      "schedule": "25 10 * * *"
-    },
-    {
-      "path": "/api/quality_monitor?type=health",
-      "schedule": "45 */6 * * *"
-    },
-    {
-      "path": "/api/job_perp_funding_rates",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/job_tvl_defi_daily",
-      "schedule": "30 11 * * *"
-    },
-    {
-      "path": "/api/job_dex_info",
-      "schedule": "0 */12 * * *"
-    },
-    {
-      "path": "/api/job_narratives_daily",
-      "schedule": "15 12 * * *"
     }
   ],
   "functions": {
