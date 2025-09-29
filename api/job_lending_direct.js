@@ -25,7 +25,7 @@ async function fetchLendingData() {
     throw new Error('DEFILLAMA_API_KEY environment variable is required');
   }
 
-  const url = `https://pro-api.llama.fi/${DEFILLAMA_API_KEY}/yields/poolsBorrow`;
+  const url = `https://pro-api.llama.fi/${DEFILLAMA_API_KEY}/yields/pools`;
   
   console.log(`📡 Fetching lending data from DeFiLlama Pro API`);
   
@@ -81,10 +81,10 @@ async function insertLendingData(client, lendingData) {
         pool.totalSupplyUsd || null,                    // total_supply_usd
         pool.totalBorrowUsd || null,                    // total_borrow_usd
         pool.debtCeilingUsd || null,                    // debt_ceiling_usd
-        pool.apyBaseSupply || null,                     // apy_base_supply
-        pool.apyRewardSupply || null,                   // apy_reward_supply
-        pool.apyBaseBorrow || null,                     // apy_base_borrow
-        pool.apyRewardBorrow || null,                   // apy_reward_borrow
+        pool.apyBase || null,                           // apy_base_supply (supply APY from pools endpoint)
+        pool.apyReward || null,                         // apy_reward_supply (reward APY from pools endpoint)
+        null,                                           // apy_base_borrow (not available in pools endpoint)
+        null,                                           // apy_reward_borrow (not available in pools endpoint)
         pool.pool || null,                              // pool_id (duplicate of market_id, but API uses 'pool')
         pool.tvlUsd || null,                            // tvl_usd
         pool.apy || null,                               // apy
