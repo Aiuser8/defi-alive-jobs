@@ -14,7 +14,7 @@ function makePoolFromEnv() {
 }
 
 /**
- * Fetches lending market data from DeFiLlama Pro API
+ * Fetches both supply and borrow lending market data from DeFiLlama Pro API
  */
 async function fetchLendingData() {
   const { DEFILLAMA_API_KEY } = process.env;
@@ -25,9 +25,9 @@ async function fetchLendingData() {
     throw new Error('DEFILLAMA_API_KEY environment variable is required');
   }
 
-  const url = `https://pro-api.llama.fi/${DEFILLAMA_API_KEY}/yields/pools`;
+  const url = `https://pro-api.llama.fi/${DEFILLAMA_API_KEY}/yields/poolsBorrow`;
   
-  console.log(`📡 Fetching lending data from DeFiLlama Pro API`);
+  console.log(`📡 Fetching lending data with both supply and borrow APYs from DeFiLlama Pro API`);
   
   const response = await fetch(url);
   if (!response.ok) {
@@ -37,10 +37,10 @@ async function fetchLendingData() {
   
   const data = await response.json();
   if (!data.data || !Array.isArray(data.data)) {
-    throw new Error('Invalid API response format');
+    throw new Error('Invalid API response format - expected array of lending data');
   }
   
-  console.log(`✅ Fetched ${data.data.length} lending markets`);
+  console.log(`✅ Fetched ${data.data.length} lending markets with supply and borrow APY data`);
   return data.data;
 }
 
@@ -81,10 +81,10 @@ async function insertLendingData(client, lendingData) {
         pool.totalSupplyUsd || null,                    // total_supply_usd
         pool.totalBorrowUsd || null,                    // total_borrow_usd
         pool.debtCeilingUsd || null,                    // debt_ceiling_usd
-        pool.apyBase || null,                           // apy_base_supply (supply APY from pools endpoint)
-        pool.apyReward || null,                         // apy_reward_supply (reward APY from pools endpoint)
-        null,                                           // apy_base_borrow (not available in pools endpoint)
-        null,                                           // apy_reward_borrow (not available in pools endpoint)
+        pool.apyBase || null,                           // apy_base_supply (supply APY from poolsBorrow endpoint)
+        pool.apyReward || null,                         // apy_reward_supply (supply reward APY)
+        pool.apyBaseBorrow || null,                     // apy_base_borrow (borrow APY from poolsBorrow endpoint)
+        pool.apyRewardBorrow || null,                   // apy_reward_borrow (borrow reward APY)
         pool.pool || null,                              // pool_id (duplicate of market_id, but API uses 'pool')
         pool.tvlUsd || null,                            // tvl_usd
         pool.apy || null,                               // apy
