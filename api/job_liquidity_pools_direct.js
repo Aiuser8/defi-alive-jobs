@@ -71,7 +71,11 @@ async function insertPoolData(client, poolData) {
   
   console.log(`📝 Inserting ${poolData.length} pool records...`);
   
-  for (const pool of poolData) {
+  // Base timestamp in seconds
+  const baseTimestamp = Math.floor(Date.now() / 1000);
+  
+  for (let i = 0; i < poolData.length; i++) {
+    const pool = poolData[i];
     try {
       const insertQuery = `
         INSERT INTO update.cl_pool_hist (
@@ -79,9 +83,12 @@ async function insertPoolData(client, poolData) {
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       `;
       
+      // Add microsecond offset to ensure unique timestamps
+      const uniqueTimestamp = baseTimestamp + (i * 0.001);
+      
       const values = [
         pool.pool || null,                    // pool_id
-        Math.floor(Date.now() / 1000),       // ts (unix timestamp)
+        uniqueTimestamp,                      // ts (unix timestamp with microsecond offset)
         pool.project || null,                // project
         pool.chain || null,                  // chain
         pool.symbol || null,                 // symbol
