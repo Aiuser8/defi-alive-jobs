@@ -43,9 +43,9 @@ async function fetchPoolData(offset, limit) {
     throw new Error('DEFILLAMA_API_KEY environment variable is required');
   }
 
-  const url = `https://pro-api.llama.fi/${DEFILLAMA_API_KEY}/yields?offset=${offset}&limit=${limit}`;
+  const url = `https://pro-api.llama.fi/${DEFILLAMA_API_KEY}/yields/pools?offset=${offset}&limit=${limit}`;
   
-  console.log(`📡 Fetching pools ${offset}-${offset + limit - 1} from DeFiLlama Pro API`);
+  console.log(`📡 Fetching pools ${offset}-${offset + limit - 1} from: ${url.replace(DEFILLAMA_API_KEY, '[API_KEY]')}`);
   
   const response = await fetch(url);
   if (!response.ok) {
