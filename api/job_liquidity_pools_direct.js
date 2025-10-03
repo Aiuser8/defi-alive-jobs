@@ -71,8 +71,8 @@ async function insertPoolData(client, poolData) {
   
   console.log(`📝 Inserting ${poolData.length} pool records...`);
   
-  // Base timestamp in seconds
-  const baseTimestamp = Math.floor(Date.now() / 1000);
+  // Base timestamp in milliseconds (for bigint column)
+  const baseTimestamp = Date.now();
   
   for (let i = 0; i < poolData.length; i++) {
     const pool = poolData[i];
@@ -91,8 +91,8 @@ async function insertPoolData(client, poolData) {
           url = EXCLUDED.url
       `;
       
-      // Add microsecond offset to ensure unique timestamps
-      const uniqueTimestamp = baseTimestamp + (i * 0.001);
+      // Add millisecond offset to ensure unique timestamps (bigint compatible)
+      const uniqueTimestamp = baseTimestamp + i;
       
       const values = [
         pool.pool || null,                    // pool_id
