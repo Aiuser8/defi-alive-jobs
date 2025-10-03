@@ -81,6 +81,14 @@ async function insertPoolData(client, poolData) {
         INSERT INTO update.cl_pool_hist (
           pool_id, ts, project, chain, symbol, tvl_usd, apy, apy_base, url
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT (pool_id, ts) DO UPDATE SET
+          project = EXCLUDED.project,
+          chain = EXCLUDED.chain,
+          symbol = EXCLUDED.symbol,
+          tvl_usd = EXCLUDED.tvl_usd,
+          apy = EXCLUDED.apy,
+          apy_base = EXCLUDED.apy_base,
+          url = EXCLUDED.url
       `;
       
       // Add microsecond offset to ensure unique timestamps
