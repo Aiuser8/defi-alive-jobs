@@ -1,13 +1,14 @@
 {
-  "crons": [
+  "crons": [],
+  "_comment_paused_crons": [
     {
       "path": "/api/dispatcher_token_prices_direct",
       "schedule": "*/5 * * * *"
     },
-        {
-          "path": "/api/dispatcher_lending_direct_v2",
-          "schedule": "*/10 * * * *"
-        },
+    {
+      "path": "/api/dispatcher_lending_direct_v2",
+      "schedule": "*/10 * * * *"
+    },
     {
       "path": "/api/dispatcher_liquidity_pools_direct",
       "schedule": "5 * * * *"
